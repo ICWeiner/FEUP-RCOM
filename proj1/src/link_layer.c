@@ -9,7 +9,7 @@
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    // TODO?
+    // TODO:check functionality
     // Open serial port device for reading and writing
     // the O_RDWR flag indicates that the port will be open for reading and writing
     //the O_NOCTTY flag tells UNIX that this program doesn't want to be the "controlling terminal" for that port.
@@ -33,7 +33,7 @@ int llopen(LinkLayer connectionParameters)
     // Clear struct for new port settings
     memset(&newtio, 0, sizeof(newtio));
 
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
@@ -61,21 +61,15 @@ int llopen(LinkLayer connectionParameters)
 
     printf("New termios structure set\n");
 
-    signal(SIGALARM, alarm_handler);
+    //TODO use signal() for timeouts
+    //signal(SIGALARM, alarm_handler);
 
     switch (connectionParameters.role){
     case LlTx:
-        linkLayer.role = LlTx;
         //TODO: state machine set as transmitter
-        if (){ //TODO:Handle error if error occurs
-
-        }
         break;
     case LlRx:
         //TODO: state machine set as receiver
-        if (){ //TODO:Handle error if error occurs
-        
-        }
         break;
     
     default:

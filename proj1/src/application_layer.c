@@ -8,16 +8,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // application layer figures out what it has to do and uses functions 
     //from link_layer to do it
 
-    //Figure out how 
-    linkLayer linklayer = {serialPort,role,baudRate,nTries,timeout}
+    //struct holding necessary date for the link layer
+    LinkLayer link_layer = {*serialPort,*role,baudRate,nTries,timeout};
 
     switch (*role){
     case 'tx'://TRANSMITTER
-        llopen()
-        /* code */
+        llopen(link_layer);
+        /* do transmitter things */
         break;
     case 'rx'://RECEIVER
-    default:
+        llopen(link_layer);
+        /* do receiver things */
+        break;
+    default://TODO: HANDLE ERROR
         break;
     }
 
