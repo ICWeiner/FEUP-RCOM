@@ -27,15 +27,7 @@ typedef struct
 // Maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
 
-// MISC
-#define FALSE 0
-#define TRUE 1
 
-#define BAUDRATE B38400
-
-struct link_layer linkLayer;
-struct termios oldtio;
-volatile int STOP;
 
 
 // Open a connection using the "port" parameters defined in struct linkLayer.

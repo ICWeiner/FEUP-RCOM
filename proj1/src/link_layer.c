@@ -1,8 +1,14 @@
 // Link layer protocol implementation
 #include "link_layer.h"
+#include "macros.h"
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
+
+
+struct link_layer linkLayer;
+struct termios oldtio;
+volatile int STOP;
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -20,7 +26,6 @@ int llopen(LinkLayer connectionParameters)
         exit(-1);
     }
 
-    struct termios oldtio;
     struct termios newtio;
 
     // Save current port settings
@@ -39,8 +44,8 @@ int llopen(LinkLayer connectionParameters)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received
+    newtio.c_cc[VTIME] = 1; // Inter-character timer 
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -59,17 +64,20 @@ int llopen(LinkLayer connectionParameters)
         exit(-1);
     }
 
-    printf("New termios structure set\n");
+
 
     //TODO use signal() for timeouts
     //signal(SIGALARM, alarm_handler);
 
+    unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
+    int res, frame_length = 0, state = S0;
+
     switch (connectionParameters.role){
     case LlTx:
-        //TODO: state machine set as transmitter
+        //TODO: set as transmitter
         break;
     case LlRx:
-        //TODO: state machine set as receiver
+        //TODO: set as receiver
         break;
     
     default:
@@ -126,8 +134,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet)
-{
+int llread(unsigned char *packet){
     // TODO
 
     return 0;
@@ -136,9 +143,10 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics)
-{
-    // TODO
+int llclose(int showStatistics){
+    
+    // TODO handle this part diferently, depending if im a transmiter or a receiver
+    /*
     switch (connectionParameters.role){
     case LlTx:
         //TODO: state machine set as transmitter
@@ -155,7 +163,7 @@ int llclose(int showStatistics)
     
     default:
         return -1;
-    }
+    }*/
 
     // Wait until all bytes have been written to the serial port
     sleep(1);
