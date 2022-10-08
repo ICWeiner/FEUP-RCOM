@@ -6,10 +6,12 @@
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 struct termios oldtio;
+LinkLayer *connectionParameters_ptr;
 volatile int STOP;
 int alarmEnabled = FALSE;
 int alarmCount = 0; // current amount of trie
 int ERROR_FLAG = FALSE;
+
 
 void alarm_handler() {
     alarmEnabled = FALSE;
@@ -61,11 +63,12 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
 
         if ( c == FLAG){
             if (frame_type == FRAME_I){//information frame
-            ERROR_FLAG = 1;
-            STOP = TRUE;
-        }else{
-            *state = S0;
-            *length = 0;
+                ERROR_FLAG = 1;
+                STOP = TRUE;
+            }else{
+                *state = S0;
+                *length = 0;
+            }
         }
         
     default:
@@ -73,7 +76,7 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
     }
 }
 
-int set_as_transmitter(int* fd, LinkLayer *connectionParameters_ptr) {
+int set_as_transmitter(int* fd) {
     unsigned char SET[5] = {FLAG, ADDRESS_T, CONTROL_T, BCC_T, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 	
@@ -104,7 +107,7 @@ int set_as_transmitter(int* fd, LinkLayer *connectionParameters_ptr) {
     return TRUE;
 }
 
-int set_as_receiver(int* fd,LinkLayer *connectionParameters_ptr) {
+int set_as_receiver(int* fd) {
     unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 
@@ -132,7 +135,6 @@ int llopen(LinkLayer connectionParameters)
     // TODO:check functionality
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     int result = FALSE;//if this var is false, it means we failed to set the mode
-    struct LinkLayer *connectionParameters_ptr;
     connectionParameters_ptr = &connectionParameters;
 
     if (fd < 0)
@@ -173,9 +175,9 @@ int llopen(LinkLayer connectionParameters)
     }
 
     if(strcmp(connectionParameters.role,LlTx)) //set as transmitter
-        result = set_as_transmitter(&fd,connectionParameters_ptr);
+        result = set_as_transmitter(&fd);
     else if (strcmp(connectionParameters.role,LlRx))//set as receiver
-        result = set_as_receiver(&fd,connectionParameters_ptr);
+        result = set_as_receiver(&fd);
 
     if(result == TRUE)
         return fd;
@@ -192,40 +194,6 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
-   
-
-    /*
-    // Create string to send
-    unsigned char send_buf[BUF_SIZE] = {0};
-    unsigned char rcv_buf[BUF_SIZE] = {0};
-    
-    int bytes=0;
-    
-    while(STOP == FALSE){
-		printf("Start writing:");
-		scanf("%s",&send_buf);
-		
-		int i = 0;
-        for (; i < BUF_SIZE; i++) {
-			if (send_buf[i] == '\0')
-			break;
-    }
-    
-    bytes = write(fd, send_buf, i+1);
-    printf("Sent: %s:%d\n", send_buf, bytes);
-    
-    unsigned char rcv_char;
-    bytes = 0;
-    do {
-		bytes += read(fd, &rcv_char, 1);
-		rcv_buf[bytes-1] = rcv_char;
-	} while(rcv_char != '\0');
-	
-	printf("Receivd: %s:%d\n", rcv_buf, bytes);
-	if (send_buf[0] == 'z') {
-		STOP = TRUE;
-	}*/
     
 
     return 0;
@@ -244,27 +212,16 @@ int llread(unsigned char *packet){
 // LLCLOSE
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
-    
-    // TODO handle this part diferently, depending if im a transmiter or a receiver
-    /*
-    switch (connectionParameters.role){
-    case LlTx:
-        //TODO: state machine set as transmitter
-        if (){ //TODO:Handle error if error occurs
+    unsigned char* received, UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG};
 
-        }
-        break;
-    case LlRx:
-        //TODO: state machine set as receiver
-        if (){ //TODO:Handle error if error occurs
-        
-        }
-        break;
+    if(strcmp(connectionParameters_ptr->role,LlTx)){
+        received = send_DISC(fd);
+        write(fd, UA, 5);
+        sleep(1);
+    }else if(strcmp(connectionParameters_ptr->role,LlRx)){
+        received = send_DISC(fd);;  
+    }
     
-    default:
-        return -1;
-    }*/
-
     // Wait until all bytes have been written to the serial port
     sleep(1);
 
