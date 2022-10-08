@@ -11,6 +11,7 @@ volatile int STOP;
 int alarmEnabled = FALSE;
 int alarmCount = 0; // current amount of trie
 int ERROR_FLAG = FALSE;
+int fd;
 
 
 void alarm_handler() {
@@ -76,14 +77,14 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
     }
 }
 
-int set_as_transmitter(int* fd) {
+int set_as_transmitter() {
     unsigned char SET[5] = {FLAG, ADDRESS_T, CONTROL_T, BCC_T, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 	
     (void) signal(SIGALRM, alarm_handler);
     
     while(alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount) {
-        res = write(*fd, SET, 5);
+        res = write(fd, SET, 5);
 
         alarm(connectionParameters_ptr->timeout);
         alarmCount = 0;
@@ -91,11 +92,11 @@ int set_as_transmitter(int* fd) {
         //Wait for UA signal.
 
         while(alarmEnabled == 0 && STOP == FALSE) {
-            res = read(*fd, &elem, 1);
+            res = read(fd, &elem, 1);
        		
             if(res > 0) {
                 frame_length++;
-          		state_machine(elem, &state, frame, &frame_length, FRAME_S);
+          		state_handler(elem, &state, frame, &frame_length, FRAME_S);
        		}
       }
   }
@@ -107,20 +108,20 @@ int set_as_transmitter(int* fd) {
     return TRUE;
 }
 
-int set_as_receiver(int* fd) {
+int set_as_receiver() {
     unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 
     while(STOP == FALSE) {
-        res = read(*fd, &elem, 1);
+        res = read(fd, &elem, 1);
 
         if(res > 0) {
 		    frame_length++;
-            state_machine(elem, &state, frame, &frame_length, FRAME_S);
+            state_handler(elem, &state, frame, &frame_length, FRAME_S);
       }
     }
 
-	res = write(*fd, UA, 5);
+	res = write(fd, UA, 5);
 
 	return TRUE;
 }
@@ -133,7 +134,7 @@ int set_as_receiver(int* fd) {
 int llopen(LinkLayer connectionParameters)
 {
     // TODO:check functionality
-    int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     int result = FALSE;//if this var is false, it means we failed to set the mode
     connectionParameters_ptr = &connectionParameters;
 
@@ -192,9 +193,38 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int bufSize)
-{
+int llwrite(const unsigned char *buf, int bufSize){
+    unsigned char* full_message = create_frame(buf, bufSize), elem, frame[5];
+    int res, frame_length = 0, state = S0;
+
+    if(bufSize < 0)
+        return FALSE;
+
+    alarmCount = 1;
+    alarmEnabled = TRUE;
+    ERROR_FLAG = FALSE;
+    STOP = FALSE;
+
+    while (alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount){
+        res = write(fd,full_message, bufSize);
+        alarm(connectionParameters_ptr->timeout);
+        alarmEnabled = FALSE;
+    }
+
+    //Wait for response
+
+    while( alarmEnabled == FALSE && STOP == FALSE){
+        res = read(fd,&elem, bufSize);
+
+        if(res > 0){
+            frame_length++;
+            state_handler(elem, &state,frame,&frame_length,FRAME_S);
+        }
+    }
     
+    if (STOP == TRUE){
+
+    }
 
     return 0;
 }
@@ -233,4 +263,22 @@ int llclose(int showStatistics){
     }
 
     return close(fd);
+}
+
+unsigned char* create_frame(unsigned char* buf, int* bufSize) {
+	unsigned char BCC2 = 0x00, *new_message = malloc((*bufSize + 1) * sizeof(unsigned char));
+	
+    
+    for(int i = 0; i < *bufSize; i++) {
+		new_message[i] = buf[i];
+		BCC2 ^= buf[i];
+	}
+	
+    new_message[*bufSize] = BCC2;
+	*bufSize += 1;
+	
+
+	unsigned char* stuffed_message = stuffing(new_message, bufSize), *control_message = frame_header(stuffed_message, bufSize);
+
+	return control_message;
 }
