@@ -5,10 +5,71 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
-
-struct link_layer linkLayer;
 struct termios oldtio;
 volatile int STOP;
+int alarmEnabled = FALSE;
+int alarmCount = 0; // current amount of trie
+int ERROR_FLAG = FALSE;
+
+void alarm_handler() {
+    alarmEnabled = FALSE;
+    alarmCount++;
+
+    printf("Alarm #%d\n", alarmCount);
+}
+
+//void state_handler(unsigned char c,)
+
+int set_as_transmitter(int* fd, LinkLayer connectionParameters) {
+    unsigned char SET[5] = {FLAG, ADDRESS_T, CONTROL_T, BCC_T, FLAG}, elem, frame[5];
+    int res, frame_length = 0, state = S0;
+	
+    (void) signal(SIGALRM, alarm_handler);
+    
+    while(alarmEnabled == TRUE && connectionParameters.nRetransmissions > alarmCount) {
+        res = write(*fd, SET, 5);
+
+        alarm(connectionParameters.timeout);
+        alarmCount = 0;
+
+        //Wait for UA signal.
+
+        while(alarmEnabled == 0 && STOP == FALSE) {
+            res = read(*fd, &elem, 1);
+       		
+            if(res > 0) {
+                frame_length++;
+          		state_machine(elem, &state, frame, &frame_length, FRAME_S);
+       		}
+      }
+  }
+
+  if(ERROR_FLAG == FALSE)
+     return FALSE;
+
+  else
+    return TRUE;
+}
+
+int set_as_receiver(int* fd) {
+    unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
+    int res, frame_length = 0, state = S0;
+
+    while(STOP == FALSE) {
+        res = read(*fd, &elem, 1);
+
+        if(res > 0) {
+		    frame_length++;
+            state_machine(elem, &state, frame, &frame_length, FRAME_S);
+      }
+    }
+
+	res = write(*fd, UA, 5);
+
+	return TRUE;
+}
+
+
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -16,10 +77,11 @@ volatile int STOP;
 int llopen(LinkLayer connectionParameters)
 {
     // TODO:check functionality
-    // Open serial port device for reading and writing
-    // the O_RDWR flag indicates that the port will be open for reading and writing
-    //the O_NOCTTY flag tells UNIX that this program doesn't want to be the "controlling terminal" for that port.
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    int result = FALSE;//if this var is false, it means we failed to set the mode
+    struct LinkLayer *connectionParameters_ptr;
+    connectionParameters_ptr = &connectionParameters;
+
     if (fd < 0)
     {
         perror(connectionParameters.serialPort);
@@ -44,17 +106,10 @@ int llopen(LinkLayer connectionParameters)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
+
     newtio.c_cc[VTIME] = 1; // Inter-character timer 
     newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
-
-    // VTIME e VMIN should be changed in order to protect with a
-    // timeout the reception of the following character(s)
-
-    // Now clean the line and activate the settings for the port
-    // tcflush() discards data written to the object referred to
-    // by fd but not transmitted, or data received but not read,
-    // depending on the value of queue_selector:
-    //   TCIFLUSH - flushes data received but not read.
+    
     tcflush(fd, TCIOFLUSH);
 
     // Set new port settings
@@ -64,23 +119,15 @@ int llopen(LinkLayer connectionParameters)
         exit(-1);
     }
 
+    if(strcmp(connectionParameters.role,LlTx)) //set as transmitter
+        result = set_as_transmitter(&fd,connectionParameters_ptr);
+    else if (strcmp(connectionParameters.role,LlRx))//set as receiver
+        result = set_as_receiver(&fd,connectionParameters_ptr);
 
-
-    //TODO use signal() for timeouts
-    //signal(SIGALARM, alarm_handler);
-
-    unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
-    int res, frame_length = 0, state = S0;
-
-    switch (connectionParameters.role){
-    case LlTx:
-        //TODO: set as transmitter
-        break;
-    case LlRx:
-        //TODO: set as receiver
-        break;
-    
-    default:
+    if(result == TRUE)
+        return fd;
+    else{//FAILED TO SET MODE, close attempted connection
+        llclose(0);
         return -1;
     }
 
