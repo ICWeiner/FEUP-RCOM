@@ -12,6 +12,7 @@ int alarmEnabled = FALSE;
 int alarmCount = 0; // current amount of trie
 int ERROR_FLAG = FALSE;
 int fd;
+int controlValue;
 
 
 void alarm_handler() {
@@ -137,6 +138,7 @@ int llopen(LinkLayer connectionParameters)
     fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
     int result = FALSE;//if this var is false, it means we failed to set the mode
     connectionParameters_ptr = &connectionParameters;
+    controlValue = 0;
 
     if (fd < 0)
     {
