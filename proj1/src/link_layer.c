@@ -18,18 +18,71 @@ void alarm_handler() {
     printf("Alarm #%d\n", alarmCount);
 }
 
-//void state_handler(unsigned char c,)
+void state_handler(unsigned char c,int* state, unsigned char* frame, int *length, int frame_type){
+    switch (*state){
+    case S0://START state, set to next state if FLAG received
+        if(c == FLAG){
+            *state = S1;
+            frame[*length - 1] = c;
+        }
+        break;
+    case S1://FLAG_RCV state, set to next state if ack received
+        if(c != FLAG) {
+            frame[*length - 1] = c;
+            if(*length == 4) {
+                if ((frame[1] ^ frame[2] == frame[3]))//check if UA received
+                    *state = S2;
+                 else 
+                    *state = SESC;
+                }
+            else{
+                *length = 1;
+                frame[*length - 1] = c;
+                }
+            }
+        break;
+    case S2://A_RCV state, set to next state if control received
+        frame[*length - 1] = c;
 
-int set_as_transmitter(int* fd, LinkLayer connectionParameters) {
+        if(c == FLAG){
+            STOP = TRUE;
+            alarm(0);
+            alarmEnabled = FALSE;
+        }
+        else{
+            if(frame_type == FRAME_S){//supervision frame
+                *state = S0;
+                *length = 0;
+            }
+            break;
+        }
+    case SESC://
+        frame[*length - 1] = c;
+
+        if ( c == FLAG){
+            if (frame_type == FRAME_I){//information frame
+            ERROR_FLAG = 1;
+            STOP = TRUE;
+        }else{
+            *state = S0;
+            *length = 0;
+        }
+        
+    default:
+        break;
+    }
+}
+
+int set_as_transmitter(int* fd, LinkLayer *connectionParameters_ptr) {
     unsigned char SET[5] = {FLAG, ADDRESS_T, CONTROL_T, BCC_T, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 	
     (void) signal(SIGALRM, alarm_handler);
     
-    while(alarmEnabled == TRUE && connectionParameters.nRetransmissions > alarmCount) {
+    while(alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount) {
         res = write(*fd, SET, 5);
 
-        alarm(connectionParameters.timeout);
+        alarm(connectionParameters_ptr->timeout);
         alarmCount = 0;
 
         //Wait for UA signal.
@@ -51,7 +104,7 @@ int set_as_transmitter(int* fd, LinkLayer connectionParameters) {
     return TRUE;
 }
 
-int set_as_receiver(int* fd) {
+int set_as_receiver(int* fd,LinkLayer *connectionParameters_ptr) {
     unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG}, elem, frame[5];
     int res, frame_length = 0, state = S0;
 
