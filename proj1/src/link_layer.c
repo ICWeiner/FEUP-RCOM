@@ -318,17 +318,50 @@ unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
     return full_frame;
 }
 
-unsigned char* remove_supervision_frame(unsigned char* message, int* lenght) {
-    unsigned char* control_message = malloc((*lenght -5) *sizeof(unsigned char));
+unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
+    unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
 
-    for (int i = 4, j = 0; i < *lenght; i++ , j++){
+    for (int i = 4, j = 0; i < *length; i++ , j++){
         control_message[j] = message[i];
     }
 
-    *lenght +=5;
+    *length +=5;
 
     free(message);
 
-    return control_message;
+    return control_message;   
+}
+
+unsigned char* stuffing(unsigned char* message, int* length){
+    unsigned int array_length = *length;
+    unsigned char* str = malloc(array_length * sizeof(unsigned char));
+    int j = 0;
+
+    for(int i = 0; i < *length; i++, j++){
+        if(j >= array_length) {
+            array_length*=2;
+            str = realloc(str, array_length * sizeof(unsigned char));
+        }
+
+        f(message[i] == 0x7d) {
+			str[j] = 0x7d;
+			str[j + 1]= 0x5d;
+			j++;
+		}
+
+		else if(message[i] ==  0x7e) {
+			str[j] = 0x7d;
+			str[j + 1] = 0x5e;
+			j++;
+		}
+
+		else{
+            str[j] = message[i];
+        }
+    }
+    *length = j;
     
+    free(message);
+
+    return str;
 }
