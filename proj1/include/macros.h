@@ -30,6 +30,8 @@
 #define ERROR_PERCENTAGE_BCC1 0
 #define ERROR_PERCENTAGE_BCC2 0
 
+#define PACKET_SIZE_LIMIT 256
+
 #define S0 0
 #define S1 1
 #define S2 2

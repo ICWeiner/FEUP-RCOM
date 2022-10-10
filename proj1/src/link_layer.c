@@ -84,17 +84,22 @@ int set_as_transmitter() {
 	
     (void) signal(SIGALRM, alarm_handler);
     
-    while(alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount) {
+    while(connectionParameters_ptr->nRetransmissions > alarmCount) {
         res = write(fd, SET, 5);
 
         alarm(connectionParameters_ptr->timeout);
         alarmCount = 0;
+        alarmEnabled =TRUE;
 
         //Wait for UA signal.
 
-        while(alarmEnabled == 0 && STOP == FALSE) {
+        while(alarmEnabled == TRUE && STOP == FALSE) {
             res = read(fd, &elem, 1);
-       		
+
+            if(res < 0){
+                STOP = TRUE;
+                return -1;
+            }       		
             if(res > 0) {
                 frame_length++;
           		state_handler(elem, &state, frame, &frame_length, FRAME_S);
@@ -211,24 +216,32 @@ int llwrite(const unsigned char *buf, int bufSize){
         res = write(fd,full_message, bufSize);
         alarm(connectionParameters_ptr->timeout);
         alarmEnabled = FALSE;
-    }
 
-    //Wait for response
+        //Wait for response
 
-    while( alarmEnabled == FALSE && STOP == FALSE){
+        while( alarmEnabled == FALSE && STOP == FALSE){
         res = read(fd,&elem, bufSize);
 
-        if(res > 0){
-            frame_length++;
-            state_handler(elem, &state,frame,&frame_length,FRAME_S);
+            if(res > 0){
+                frame_length++;
+                state_handler(elem, &state,frame,&frame_length,FRAME_S);
+                }
+            }
+
+        if (STOP == TRUE){
+            alarmEnabled = TRUE;
+            alarmCount = 0;
+            ERROR_FLAG = FALSE;
+            STOP = FALSE;
+            state = S0;
+            frame_length = 0;
         }
     }
-    
-    if (STOP == TRUE){
 
-    }
+    if (ERROR_FLAG == TRUE)
+        return FALSE;
 
-    return 0;
+    return TRUE;
 }
 
 ////////////////////////////////////////////////
@@ -283,4 +296,39 @@ unsigned char* create_frame(unsigned char* buf, int* bufSize) {
 	unsigned char* stuffed_message = stuffing(new_message, bufSize), *control_message = frame_header(stuffed_message, bufSize);
 
 	return control_message;
+}
+
+unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
+    unsigned char* full_frame = malloc((*length + 5) * sizeof(unsigned char));
+
+    full_frame[0] = FLAG;
+    full_frame[1] = ADDRESS_T;
+    full_frame[2] = 0;
+    full_frame[3] = full_frame[1] ^ full_frame[2];
+
+    for(int i = 0; i < *length; i++){
+        full_frame[i+4] = stuffed_frame[i];
+    }
+
+    full_frame[*length + 4] = FLAG;
+    *length +=5;
+
+    free(stuffed_frame);
+
+    return full_frame;
+}
+
+unsigned char* remove_supervision_frame(unsigned char* message, int* lenght) {
+    unsigned char* control_message = malloc((*lenght -5) *sizeof(unsigned char));
+
+    for (int i = 4, j = 0; i < *lenght; i++ , j++){
+        control_message[j] = message[i];
+    }
+
+    *lenght +=5;
+
+    free(message);
+
+    return control_message;
+    
 }
