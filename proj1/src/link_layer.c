@@ -1,6 +1,10 @@
 // Link layer protocol implementation
 #include "link_layer.h"
 #include "macros.h"
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -13,13 +17,13 @@ int alarmCount = 0; // current amount of trie
 int ERROR_FLAG = FALSE;
 int fd;
 int controlValue;
-
+unsigned char control_values[] = {0x00, 0x40, 0x05, 0x85, 0x01, 0x81};
 
 void alarm_handler() {
     alarmEnabled = FALSE;
     alarmCount++;
 
-    printf("Alarm #%d\n", alarmCount);
+    //printf("Alarm #%d\n", alarmCount);
 }
 
 void state_handler(unsigned char c,int* state, unsigned char* frame, int *length, int frame_type){
@@ -34,7 +38,7 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
         if(c != FLAG) {
             frame[*length - 1] = c;
             if(*length == 4) {
-                if ((frame[1] ^ frame[2] == frame[3]))//check if UA received
+                if ((frame[1] ^ frame[2]) == frame[3])//check if UA received
                     *state = S2;
                  else 
                     *state = SESC;
@@ -132,206 +136,6 @@ int set_as_receiver() {
 	return TRUE;
 }
 
-
-
-////////////////////////////////////////////////
-// LLOPEN
-////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters)
-{
-    // TODO:check functionality
-    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
-    int result = FALSE;//if this var is false, it means we failed to set the mode
-    connectionParameters_ptr = &connectionParameters;
-    controlValue = 0;
-
-    if (fd < 0)
-    {
-        perror(connectionParameters.serialPort);
-        exit(-1);
-    }
-
-    struct termios newtio;
-
-    // Save current port settings
-    if (tcgetattr(fd, &oldtio) == -1)
-    {
-        perror("tcgetattr");
-        exit(-1);
-    }
-
-    // Clear struct for new port settings
-    memset(&newtio, 0, sizeof(newtio));
-
-    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
-
-    // Set input mode (non-canonical, no echo,...)
-    newtio.c_lflag = 0;
-
-    newtio.c_cc[VTIME] = 1; // Inter-character timer 
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
-    
-    tcflush(fd, TCIOFLUSH);
-
-    // Set new port settings
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-    {
-        perror("tcsetattr");
-        exit(-1);
-    }
-
-    if(strcmp(connectionParameters.role,LlTx)) //set as transmitter
-        result = set_as_transmitter(&fd);
-    else if (strcmp(connectionParameters.role,LlRx))//set as receiver
-        result = set_as_receiver(&fd);
-
-    if(result == TRUE)
-        return fd;
-    else{//FAILED TO SET MODE, close attempted connection
-        llclose(0);
-        return -1;
-    }
-
-    return fd;
-}
-
-////////////////////////////////////////////////
-// LLWRITE
-////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int bufSize){
-    unsigned char* full_message = create_frame(buf, bufSize), elem, frame[5];
-    int res, frame_length = 0, state = S0;
-
-    if(bufSize < 0)
-        return FALSE;
-
-    alarmCount = 1;
-    alarmEnabled = TRUE;
-    ERROR_FLAG = FALSE;
-    STOP = FALSE;
-
-    while (alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount){
-        res = write(fd,full_message, bufSize);
-        alarm(connectionParameters_ptr->timeout);
-        alarmEnabled = FALSE;
-
-        //Wait for response
-
-        while( alarmEnabled == FALSE && STOP == FALSE){
-        res = read(fd,&elem, bufSize);
-
-            if(res > 0){
-                frame_length++;
-                state_handler(elem, &state,frame,&frame_length,FRAME_S);
-                }
-            }
-
-        if (STOP == TRUE){
-            alarmEnabled = TRUE;
-            alarmCount = 0;
-            ERROR_FLAG = FALSE;
-            STOP = FALSE;
-            state = S0;
-            frame_length = 0;
-        }
-    }
-
-    if (ERROR_FLAG == TRUE)
-        return FALSE;
-
-    return TRUE;
-}
-
-////////////////////////////////////////////////
-// LLREAD
-////////////////////////////////////////////////
-int llread(unsigned char *packet){
-    // TODO
-
-    return 0;
-}
-
-////////////////////////////////////////////////
-// LLCLOSE
-////////////////////////////////////////////////
-int llclose(int showStatistics){
-    unsigned char* received, UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG};
-
-    if(strcmp(connectionParameters_ptr->role,LlTx)){
-        received = send_DISC(fd);
-        write(fd, UA, 5);
-        sleep(1);
-    }else if(strcmp(connectionParameters_ptr->role,LlRx)){
-        received = send_DISC(fd);;  
-    }
-    
-    // Wait until all bytes have been written to the serial port
-    sleep(1);
-
-    // Restore the old port settings
-    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
-    {
-        perror("tcsetattr");
-        exit(-1);
-    }
-
-    return close(fd);
-}
-
-unsigned char* create_frame(unsigned char* buf, int* bufSize) {
-	unsigned char BCC2 = 0x00, *new_message = malloc((*bufSize + 1) * sizeof(unsigned char));
-	
-    
-    for(int i = 0; i < *bufSize; i++) {
-		new_message[i] = buf[i];
-		BCC2 ^= buf[i];
-	}
-	
-    new_message[*bufSize] = BCC2;
-	*bufSize += 1;
-	
-
-	unsigned char* stuffed_message = stuffing(new_message, bufSize), *control_message = frame_header(stuffed_message, bufSize);
-
-	return control_message;
-}
-
-unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
-    unsigned char* full_frame = malloc((*length + 5) * sizeof(unsigned char));
-
-    full_frame[0] = FLAG;
-    full_frame[1] = ADDRESS_T;
-    full_frame[2] = 0;
-    full_frame[3] = full_frame[1] ^ full_frame[2];
-
-    for(int i = 0; i < *length; i++){
-        full_frame[i+4] = stuffed_frame[i];
-    }
-
-    full_frame[*length + 4] = FLAG;
-    *length +=5;
-
-    free(stuffed_frame);
-
-    return full_frame;
-}
-
-unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
-    unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
-
-    for (int i = 4, j = 0; i < *length; i++ , j++){
-        control_message[j] = message[i];
-    }
-
-    *length +=5;
-
-    free(message);
-
-    return control_message;   
-}
-
 unsigned char* stuffing(unsigned char* message, int* length){
     unsigned int array_length = *length;
     unsigned char* str = malloc(array_length * sizeof(unsigned char));
@@ -402,6 +206,60 @@ unsigned char* destuffing(unsigned char* message, int* length) {
     return str;
 }
 
+unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
+    unsigned char* full_frame = malloc((*length + 5) * sizeof(unsigned char));
+
+    full_frame[0] = FLAG;
+    full_frame[1] = ADDRESS_T;
+    full_frame[2] = 0;
+    full_frame[3] = full_frame[1] ^ full_frame[2];
+
+    for(int i = 0; i < *length; i++){
+        full_frame[i+4] = stuffed_frame[i];
+    }
+
+    full_frame[*length + 4] = FLAG;
+    *length +=5;
+
+    free(stuffed_frame);
+
+    return full_frame;
+}
+
+
+unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
+	unsigned char BCC2 = 0x00, *new_message = malloc((*bufSize + 1) * sizeof(unsigned char));
+	
+    
+    for(int i = 0; i < *bufSize; i++) {
+		new_message[i] = buf[i];
+		BCC2 ^= buf[i];
+	}
+	
+    new_message[*bufSize] = BCC2;
+	*bufSize += 1;
+	
+
+	unsigned char* stuffed_message = stuffing(new_message, bufSize), *control_message = frame_header(stuffed_message, bufSize);
+
+	return control_message;
+}
+
+
+unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
+    unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
+
+    for (int i = 4, j = 0; i < *length; i++ , j++){
+        control_message[j] = message[i];
+    }
+
+    *length +=5;
+
+    free(message);
+
+    return control_message;   
+}
+
 unsigned char* BCC2(unsigned char* control_message, int* length){
     unsigned char control_BCC2 = 0x00, *destuffed_message = destuffing(control_message,length);
 
@@ -442,10 +300,10 @@ int send_RR_REJ(int fd, unsigned int type, unsigned char c){
 
     switch (type){
         case RR:
-            //response[2] = control_values[(bool_val ^ 1) + 2]; what is this?
+            response[2] = control_values[(bool_val ^ 1) + 2]; //what is this?
             break;
         case REJ:
-            //response[2] = control_values[bool_val + 4]; ditto
+            response[2] = control_values[bool_val + 4]; //ditto
             break;
     }
 
@@ -481,4 +339,157 @@ unsigned char* send_DISC(){
         }
     }
     return frame;
+}
+
+
+
+////////////////////////////////////////////////
+// LLOPEN
+////////////////////////////////////////////////
+int llopen(LinkLayer connectionParameters)
+{
+    // TODO:check functionality
+    fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
+    int result = FALSE;//if this var is false, it means we failed to set the mode
+    connectionParameters_ptr = &connectionParameters;
+    controlValue = 0;
+
+    if (fd < 0)
+    {
+        perror(connectionParameters.serialPort);
+        exit(-1);
+    }
+
+    struct termios newtio;
+
+    // Save current port settings
+    if (tcgetattr(fd, &oldtio) == -1)
+    {
+        perror("tcgetattr");
+        exit(-1);
+    }
+
+    // Clear struct for new port settings
+    bzero(&newtio, sizeof(newtio));
+
+    newtio.c_cflag = connectionParameters.baudRate | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+
+    // Set input mode (non-canonical, no echo,...)
+    newtio.c_lflag = 0;
+
+    newtio.c_cc[VTIME] = 1; // Inter-character timer 
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
+    
+    tcflush(fd, TCIOFLUSH);
+
+    // Set new port settings
+    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+    {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+    if(connectionParameters.role == LlTx) //set as transmitter
+        result = set_as_transmitter(&fd);
+    else if (connectionParameters.role ==LlRx)//set as receiver
+        result = set_as_receiver(&fd);
+
+    if(result == TRUE)
+        return fd;
+    else{//FAILED TO SET MODE, close attempted connection
+        llclose(0);
+        return -1;
+    }
+
+    return fd;
+}
+
+////////////////////////////////////////////////
+// LLWRITE
+////////////////////////////////////////////////
+int llwrite(const unsigned char *buf, int bufSize){
+    unsigned char* full_message = create_frame(buf, &bufSize), elem, frame[5];
+    int res, frame_length = 0, state = S0;
+
+    if(bufSize < 0)
+        return FALSE;
+
+    alarmCount = 1;
+    alarmEnabled = TRUE;
+    ERROR_FLAG = FALSE;
+    STOP = FALSE;
+
+    while (alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount){
+        res = write(fd,full_message, bufSize);
+        alarm(connectionParameters_ptr->timeout);
+        alarmEnabled = FALSE;
+
+        //Wait for response
+
+        while( alarmEnabled == FALSE && STOP == FALSE){
+        res = read(fd,&elem, bufSize);
+
+            if(res > 0){
+                frame_length++;
+                state_handler(elem, &state,frame,&frame_length,FRAME_S);
+                }
+            }
+
+        if (STOP == TRUE){
+            if(control_values[controlValue + 4] == frame[2]){
+                alarmEnabled = TRUE;
+                alarmCount = 0;
+                ERROR_FLAG = FALSE;
+                STOP = FALSE;
+                state = S0;
+                frame_length = 0;
+            }
+        }
+    }
+
+    if (ERROR_FLAG == TRUE)
+        return FALSE;
+
+    return TRUE;
+}
+
+////////////////////////////////////////////////
+// LLREAD
+////////////////////////////////////////////////
+int llread(unsigned char *packet){
+    unsigned int message_array_length = 138;
+
+    return 0;
+}
+
+////////////////////////////////////////////////
+// LLCLOSE
+////////////////////////////////////////////////
+int llclose(int showStatistics){
+    //unsigned char*  received;
+    unsigned char UA[5] = {FLAG, ADDRESS_T, CONTROL_R, BCC_R, FLAG};
+    //unsigned char* received;
+    if(connectionParameters_ptr->role == LlTx ){
+        //received = send_DISC(fd);
+        send_DISC(fd);
+        write(fd, UA, 5);
+        sleep(1);
+    }else if(connectionParameters_ptr->role == LlRx){
+        //received = send_DISC(fd);
+        send_DISC(fd);
+    }
+    
+    // Wait until all bytes have been written to the serial port
+    sleep(1);
+
+    // Restore the old port settings
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+    {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+    return close(fd);
 }
