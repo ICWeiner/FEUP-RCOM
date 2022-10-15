@@ -343,14 +343,14 @@ unsigned char* stuffing(unsigned char* message, int* length){
             str = realloc(str, array_length * sizeof(unsigned char));
         }
 
-        f(message[i] == 0x7d) {
-			str[j] = 0x7d;
+        if(message[i] == ESC) {
+			str[j] = ESC;
 			str[j + 1]= 0x5d;
 			j++;
 		}
 
 		else if(message[i] ==  0x7e) {
-			str[j] = 0x7d;
+			str[j] = ESC;
 			str[j + 1] = 0x5e;
 			j++;
 		}
@@ -364,4 +364,121 @@ unsigned char* stuffing(unsigned char* message, int* length){
     free(message);
 
     return str;
+}
+
+unsigned char* destuffing(unsigned char* message, int* length) {
+    unsigned int array_length = 133;
+    unsigned char* str = malloc(array_length * sizeof(unsigned char));
+    int new_length = 0;
+
+    for(int i = 0; i < *length; i++){
+        new_length++;
+
+        if(new_length >= array_length) {
+            array_length *= 2;
+            str = realloc(str, array_length * sizeof(unsigned char));
+        }
+
+        if(message[i] == ESC) {
+            if(message[i + 1] == 0x5d){
+                str[new_length - 1] = ESC;
+                i++;
+            }
+
+            else if(message[i + 1] == 0x5e){
+                str[new_length - 1] = FLAG;
+                i++;
+            }
+        }
+        else{
+            str[new_length - 1] = message[i];
+        }
+        
+    }
+    *length = new_length;
+
+    free(message); 
+    
+    return str;
+}
+
+unsigned char* BCC2(unsigned char* control_message, int* length){
+    unsigned char control_BCC2 = 0x00, *destuffed_message = destuffing(control_message,length);
+
+    for(int i = 0; i < *length - 1; i++){
+        control_BCC2^= destuffed_message[i];
+    }
+
+    if(destuffed_message[*length - 1] != control_BCC2){
+        *length = -1;
+        return '\0';
+    }
+
+    *length = -1;
+    unsigned char* data_message = malloc(*length * sizeof(unsigned char));
+
+    for(int i = 0; i < *length; i++){
+        data_message[i] = destuffed_message[i];
+    }
+
+    free(destuffed_message);
+
+    return data_message;
+}
+
+int send_RR_REJ(int fd, unsigned int type, unsigned char c){
+    unsigned char bool_val, response[5];
+    
+    response[0] = FLAG;
+    response[1] = ADDRESS_T;
+    response[4] = FLAG;
+
+    if( c == 0x00){
+        bool_val = FALSE;
+    }
+    else{
+        bool_val = TRUE;
+    }
+
+    switch (type){
+        case RR:
+            //response[2] = control_values[(bool_val ^ 1) + 2]; what is this?
+            break;
+        case REJ:
+            //response[2] = control_values[bool_val + 4]; ditto
+            break;
+    }
+
+    response[3] = response[1] ^ response[2];
+
+    write(fd,response,5);
+
+    return bool_val ^ 1;
+
+}
+
+unsigned char* send_DISC(){
+    unsigned char elem, *frame = malloc(5 * sizeof(unsigned char)), disc[5] = {FLAG,ADDRESS_T,DISC,ADDRESS_T ^DISC, FLAG};
+    int res, frame_length = 0, state = S0;
+
+    alarmCount = 1;
+    alarmEnabled = TRUE;
+    ERROR_FLAG = FALSE;
+    STOP = FALSE;
+
+    while(alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount){
+        res = write(fd,disc,5);
+        alarm(connectionParameters_ptr->timeout);
+        alarmEnabled = FALSE;
+
+        while (alarmEnabled == FALSE && STOP == FALSE){
+            res = read(fd,&elem,1);
+
+            if (res > 0){
+                frame_length++;
+                state_handler(elem,&state,frame,&frame_length,FRAME_S);
+            }
+        }
+    }
+    return frame;
 }
