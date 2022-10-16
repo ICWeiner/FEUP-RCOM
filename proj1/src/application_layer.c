@@ -107,6 +107,7 @@ int START_END_package(unsigned char* package, int type) {
 	unsigned int file_name_length = (unsigned int) strlen(file.file_name);
 
 	//convert file size to a unsigned char array
+    // 0xFF = set todos os bits a 1
 	file_size_char[0] = (file.file_size >> 24) & 0xFF;
 	file_size_char[1] = (file.file_size >> 16) & 0xFF;
 	file_size_char[2] = (file.file_size >> 8) & 0xFF;
@@ -168,7 +169,7 @@ void file_parameters(unsigned char* message) {
 
 		for(; i < file_size_; i++)
 			file_size[i] = message[i + 3];
-
+        // como o ficheiro é enviado por octetos, é necessario dar shift dos mesmos 
 		file.file_size = (file_size[0] << 24) | (file_size[1] << 16) | (file_size[2] << 8) | (file_size[3]);
 	}
 
@@ -231,6 +232,7 @@ int verify(unsigned char* message) {
 	for(int i = 0; i < file_size_size; i++)
 		file_size_[i] = message[i + 3];
 
+        // como o ficheiro é enviado por octetos, é necessario dar shift dos mesmos 
 	file_size_total = (file_size_[0] << 24) | (file_size_[1] << 16) | (file_size_[2] << 8) | (file_size_[3]);
 
 	if(file_size_total == file.file_size && file_size_total == file_size())
