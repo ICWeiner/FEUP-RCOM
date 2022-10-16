@@ -26,31 +26,31 @@ void alarm_handler() {
     //printf("Alarm #%d\n", alarmCount);
 }
 
-void state_handler(unsigned char c,int* state, unsigned char* frame, int *length, int frame_type){
+void state_handler(unsigned char c,int* state, unsigned char* frame, int *bufSize, int frame_type){
     switch (*state){
     case S0://START state, set to next state if FLAG received
         if(c == FLAG){
             *state = S1;
-            frame[*length - 1] = c;
+            frame[*bufSize - 1] = c; // if state == s1 then its less 1 state to read
         }
         break;
     case S1://FLAG_RCV state, set to next state if ack received
         if(c != FLAG) {
-            frame[*length - 1] = c;
-            if(*length == 4) {
+            frame[*bufSize - 1] = c;
+            if(*bufSize == 4) {
                 if ((frame[1] ^ frame[2]) == frame[3])//check if UA received
                     *state = S2;
                  else 
-                    *state = SESC;
+                    *state = SESC; // state escape
                 }
             else{
-                *length = 1;
-                frame[*length - 1] = c;
+                *bufSize = 1;
+                frame[*bufSize - 1] = c;
                 }
             }
         break;
     case S2://A_RCV state, set to next state if control received
-        frame[*length - 1] = c;
+        frame[*bufSize - 1] = c;
 
         if(c == FLAG){
             STOP = TRUE;
@@ -60,12 +60,12 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
         else{
             if(frame_type == FRAME_S){//supervision frame
                 *state = S0;
-                *length = 0;
+                *bufSize = 0;
             }
             break;
         }
     case SESC://
-        frame[*length - 1] = c;
+        frame[*bufSize - 1] = c;
 
         if ( c == FLAG){
             if (frame_type == FRAME_I){//information frame
@@ -73,7 +73,7 @@ void state_handler(unsigned char c,int* state, unsigned char* frame, int *length
                 STOP = TRUE;
             }else{
                 *state = S0;
-                *length = 0;
+                *bufSize = 0;
             }
         }
         
@@ -137,25 +137,25 @@ int set_as_receiver() {
 }
 
 unsigned char* stuffing(unsigned char* message, int* length){
-    unsigned int array_length = *length;
+    unsigned int array_length = *bufSize;
     unsigned char* str = malloc(array_length * sizeof(unsigned char));
     int j = 0;
 
-    for(int i = 0; i < *length; i++, j++){
+    for(int i = 0; i < *bufSize; i++, j++){
         if(j >= array_length) {
             array_length*=2;
             str = realloc(str, array_length * sizeof(unsigned char));
         }
 
-        if(message[i] == ESC) {
+        if(message[i] == ESC) { // octeto de escape
 			str[j] = ESC;
-			str[j + 1]= 0x5d;
+			str[j + 1]= 0x5d; // substituido por 0x5d
 			j++;
 		}
 
-		else if(message[i] ==  0x7e) {
+		else if(message[i] ==  0x7e) { // flag pattern 
 			str[j] = ESC;
-			str[j + 1] = 0x5e;
+			str[j + 1] = 0x5e; // octeto é substituido por 0x5e
 			j++;
 		}
 
@@ -163,19 +163,19 @@ unsigned char* stuffing(unsigned char* message, int* length){
             str[j] = message[i];
         }
     }
-    *length = j;
+    *bufSize = j;
     
     free(message);
 
     return str;
 }
 
-unsigned char* destuffing(unsigned char* message, int* length) {
+unsigned char* destuffing(unsigned char* message, int* length) { // reverse process of stuffing
     unsigned int array_length = 133;
     unsigned char* str = malloc(array_length * sizeof(unsigned char));
     int new_length = 0;
 
-    for(int i = 0; i < *length; i++){
+    for(int i = 0; i < *bufSize; i++){
         new_length++;
 
         if(new_length >= array_length) {
@@ -199,7 +199,7 @@ unsigned char* destuffing(unsigned char* message, int* length) {
         }
         
     }
-    *length = new_length;
+    *bufSize = new_length;
 
     free(message); 
     
@@ -207,19 +207,19 @@ unsigned char* destuffing(unsigned char* message, int* length) {
 }
 
 unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
-    unsigned char* full_frame = malloc((*length + 5) * sizeof(unsigned char));
+    unsigned char* full_frame = malloc((*bufSize + 5) * sizeof(unsigned char));
 
-    full_frame[0] = FLAG;
-    full_frame[1] = ADDRESS_T;
-    full_frame[2] = 0;
-    full_frame[3] = full_frame[1] ^ full_frame[2];
+    full_frame[0] = FLAG;  
+    full_frame[1] = ADDRESS_T; // campo de endereço
+    full_frame[2] = 0;         // campo de controlo 
+    full_frame[3] = full_frame[1] ^ full_frame[2]; // BCC = Campos protecao independentes (cabecalho 1 e  dados 2)
 
-    for(int i = 0; i < *length; i++){
-        full_frame[i+4] = stuffed_frame[i];
+    for(int i = 0; i < *bufSize; i++){
+        full_frame[i+4] = stuffed_frame[i]; // i+4 avança frame 0,1,2,3 e avança para campo de informação
     }
 
-    full_frame[*length + 4] = FLAG;
-    *length +=5;
+    full_frame[*bufSize + 4] = FLAG;
+    *bufSize +=5;
 
     free(stuffed_frame);
 
@@ -247,13 +247,13 @@ unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
 
 
 unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
-    unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
+    unsigned char* control_message = malloc((*bufSize -5) *sizeof(unsigned char));
 
-    for (int i = 4, j = 0; i < *length; i++ , j++){
+    for (int i = 4, j = 0; i < *bufSize; i++ , j++){
         control_message[j] = message[i];
     }
 
-    *length +=5;
+    *bufSize +=5;
 
     free(message);
 
@@ -263,19 +263,19 @@ unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
 unsigned char* BCC2(unsigned char* control_message, int* length){
     unsigned char control_BCC2 = 0x00, *destuffed_message = destuffing(control_message,length);
 
-    for(int i = 0; i < *length - 1; i++){
+    for(int i = 0; i < *bufSize - 1; i++){
         control_BCC2^= destuffed_message[i];
     }
 
-    if(destuffed_message[*length - 1] != control_BCC2){
-        *length = -1;
+    if(destuffed_message[*bufSize - 1] != control_BCC2){
+        *bufSize = -1;
         return '\0';
     }
 
-    *length = -1;
-    unsigned char* data_message = malloc(*length * sizeof(unsigned char));
+    *bufSize = -1;
+    unsigned char* data_message = malloc(*bufSize * sizeof(unsigned char));
 
-    for(int i = 0; i < *length; i++){
+    for(int i = 0; i < *bufSize; i++){
         data_message[i] = destuffed_message[i];
     }
 
@@ -458,8 +458,67 @@ int llwrite(const unsigned char *buf, int bufSize){
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet){
+unsigned char* llread(int fd, int* bufSize) {
     unsigned int message_array_length = 138;
+	unsigned char elem, *message = malloc(message_array_length * sizeof(unsigned char)), *finish = malloc(1 * sizeof(unsigned char));
+	int res, state = S0;
+
+	*bufSize = 0;
+	flag_error = 0;
+	STOP = FALSE;
+	finish[0] = DISC;
+	
+    while(STOP == FALSE) {
+		res = read(fd, &elem, 1);
+		
+        if(res > 0) {
+			*bufSize += 1;
+			
+            if(message_array_length <= *bufSize) {
+				message_array_length *= 2;
+				message = realloc(message, message_array_length * sizeof(unsigned char));
+			}
+			state_machine(elem, &state, message, length, FRAME_I);
+		}
+	}
+
+	if(message[4] == ADDRESS_R && flag_error != 1) {
+		message = BCC1_random_error(message, *bufSize);
+		message = BCC2_random_error(message, *bufSize);
+	}
+
+	if(flag_error == 1 || message[2] == CONTROL_T || message[2] == CONTROL_R)
+		return NULL;
+
+	if(message[2] == DISC) {
+		llclose(fd, RECEIVER);
+		return finish;
+	}
+
+	duplicate = (control_values[datalink.control_value] == message[2]) ? FALSE : TRUE;
+	unsigned char temp = message[2], *no_head_message = remove_supervision_frame(message, length), *no_BCC2_message = BCC2(no_head_message, length);
+
+	if(*bufSize == -1) {
+		if(duplicate == TRUE) { // se recebeu trama duplicada envia RR receiver ready 
+			send_RR_REJ(fd, RR, temp);
+			return NULL;
+		}
+		else {
+			send_RR_REJ(fd, REJ, temp);
+			return NULL;
+		}
+	}
+
+	else {
+		if(duplicate != TRUE) {
+			datalink.control_value = send_RR_REJ(fd, RR, temp);
+			return no_BCC2_message;
+		}
+		else {
+			send_RR_REJ(fd, RR, temp);
+			return NULL;
+		}
+	}
 
     return 0;
 }
