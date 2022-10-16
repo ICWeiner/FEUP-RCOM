@@ -13,7 +13,7 @@ struct termios oldtio;
 LinkLayer *connectionParameters_ptr;
 volatile int STOP;
 int alarmEnabled = FALSE;
-int alarmCount = 0; // current amount of trie
+int alarmCount = 0; // current amount of tries
 int ERROR_FLAG = FALSE;
 int fd;
 int controlValue;
