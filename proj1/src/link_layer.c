@@ -229,12 +229,13 @@ unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
 
 unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
 	unsigned char BCC2 = 0x00, *new_message = malloc((*bufSize + 1) * sizeof(unsigned char));
-	
+	//BCC2 = 0x00 -> BCC2 = '\0' 
     
     for(int i = 0; i < *bufSize; i++) {
 		new_message[i] = buf[i];
 		BCC2 ^= buf[i];
-	}
+        }
+	//BCC2 = BCC2 XOR buf[i], meaning, the result bit is 1 if the corresponding bits of two operands are opposite.
 	
     new_message[*bufSize] = BCC2;
 	*bufSize += 1;
@@ -246,18 +247,20 @@ unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
 }
 
 
-unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
+unsigned char* remove_supervision_frame(unsigned char* message, int* length) 
+//função que remove o frame de supervisão para que possamos ficar apenas com os dados do ficheiro
+{
     unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
 
-    for (int i = 4, j = 0; i < *length; i++ , j++){
-        control_message[j] = message[i];
+    for (int i = 4, j = 0; i < *length; i++ , j++){ //passa a frente o frame de supervisao ao começar em i=4 (acho)
+        control_message[j] = message[i]; //copia o os frames com informaçao de message para control_message
     }
 
-    *length +=5;
+    *length +=5; // ???
 
     free(message);
 
-    return control_message;   
+    return control_message; //retorna message sem o frame de supervisao
 }
 
 unsigned char* BCC2(unsigned char* control_message, int* length){
@@ -284,14 +287,15 @@ unsigned char* BCC2(unsigned char* control_message, int* length){
     return data_message;
 }
 
-int send_RR_REJ(int fd, unsigned int type, unsigned char c){
+int send_RR_REJ(int fd, unsigned int type, unsigned char c) //Envia RR no caso de ter sido enviado corretamente e REJ se acontecer o oposto
+{
     unsigned char bool_val, response[5];
     
     response[0] = FLAG;
     response[1] = ADDRESS_T;
     response[4] = FLAG;
 
-    if( c == 0x00){
+    if( c == 0x00){ 
         bool_val = FALSE;
     }
     else{
