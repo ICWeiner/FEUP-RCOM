@@ -9,15 +9,29 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
+typedef struct {
+    state curr_state;
+    unsigned char adr;
+    unsigned char ctrl;
+    unsigned char bcc;
+    unsigned char *data;
+    unsigned int data_size;
+} State;
+
+
 struct termios oldtio;
-LinkLayer *connectionParameters_ptr;
-volatile int STOP;
-int alarmEnabled = FALSE;
+struct termios newtio;
+LinkLayer connectionParameters;
+State stateData;
+volatile int STOP; //do i still need this?
 int alarmCount = 0; // current amount of tries
+int alarmEnabled = FALSE;
 int ERROR_FLAG = FALSE;
+int DISCreceived = FALSE;
+unsigned char buf[512];
 int fd;
-int controlValue;
-unsigned char control_values[] = {0x00, 0x40, 0x05, 0x85, 0x01, 0x81};
+unsigned char DATA_S_FLAG = 0; //this could probably be an int
+
 
 void alarm_handler() {
     alarmEnabled = FALSE;
@@ -26,59 +40,29 @@ void alarm_handler() {
     //printf("Alarm #%d\n", alarmCount);
 }
 
-void state_handler(unsigned char c,int* state, unsigned char* frame, int *length, int frame_type){
-    switch (*state){
-    case S0://START state, set to next state if FLAG received
-        if(c == FLAG){
-            *state = S1;
-            frame[*length - 1] = c; // if state == s1 then its less 1 state to read
-        }
-        break;
-    case S1://FLAG_RCV state, set to next state if ack received
-        if(c != FLAG) {
-            frame[*length - 1] = c;
-            if(*length == 4) {
-                if ((frame[1] ^ frame[2]) == frame[3])//check if UA received
-                    *state = S2;
-                 else 
-                    *state = SESC; // state escape
-                }
-            else{
-                *length = 1;
-                frame[*length - 1] = c;
-                }
-            }
-        break;
-    case S2://A_RCV state, set to next state if control received
-        frame[*length - 1] = c;
-
-        if(c == FLAG){
-            STOP = TRUE;
-            alarm(0);
-            alarmEnabled = FALSE;
-        }
-        else{
-            if(frame_type == FRAME_S){//supervision frame
-                *state = S0;
-                *length = 0;
+void state_handler(unsigned char byte,State* stateData){
+    switch (*stateData -> curr_state){
+        case SMREJ:
+        case SMEND:
+            stateData -> curr_state=SMSTART;
+        case SMSTART:
+            if(byte == FLAG){
+                stateData ->curr_state = SMFLAG;
             }
             break;
-        }
-    case SESC://
-        frame[*length - 1] = c;
-
-        if ( c == FLAG){
-            if (frame_type == FRAME_I){//information frame
-                ERROR_FLAG = 1;
-                STOP = TRUE;
-            }else{
-                *state = S0;
-                *length = 0;
+        case SMFLAG:
+            if(byte == ADR_TX || byte == ADR_RX){
+                stateData->curr_state=SMADR;
+                stateData->adr=byte;
+                break;
             }
-        }
-        
-    default:
-        break;
+            else if(byte == FLAG){
+                break;
+            }else{
+                stateData=SMSTART;
+                break;
+            }
+            
     }
 }
 
@@ -147,15 +131,15 @@ unsigned char* stuffing(unsigned char* message, int* length){
             str = realloc(str, array_length * sizeof(unsigned char));
         }
 
-        if(message[i] == ESC) { // octeto de escape
+        if(message[i] == ESC) {
 			str[j] = ESC;
-			str[j + 1]= 0x5d; // substituido por 0x5d
+			str[j + 1]= 0x5d;
 			j++;
 		}
 
-		else if(message[i] ==  0x7e) { // flag pattern 
+		else if(message[i] ==  0x7e) {
 			str[j] = ESC;
-			str[j + 1] = 0x5e; // octeto é substituido por 0x5e
+			str[j + 1] = 0x5e;
 			j++;
 		}
 
@@ -170,7 +154,7 @@ unsigned char* stuffing(unsigned char* message, int* length){
     return str;
 }
 
-unsigned char* destuffing(unsigned char* message, int* length) { // reverse process of stuffing
+unsigned char* destuffing(unsigned char* message, int* length) {
     unsigned int array_length = 133;
     unsigned char* str = malloc(array_length * sizeof(unsigned char));
     int new_length = 0;
@@ -209,13 +193,13 @@ unsigned char* destuffing(unsigned char* message, int* length) { // reverse proc
 unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
     unsigned char* full_frame = malloc((*length + 5) * sizeof(unsigned char));
 
-    full_frame[0] = FLAG;  
-    full_frame[1] = ADDRESS_T; // campo de endereço
-    full_frame[2] = 0;         // campo de controlo 
-    full_frame[3] = full_frame[1] ^ full_frame[2]; // BCC = Campos protecao independentes (cabecalho 1 e  dados 2)
+    full_frame[0] = FLAG;
+    full_frame[1] = ADDRESS_T;
+    full_frame[2] = 0;
+    full_frame[3] = full_frame[1] ^ full_frame[2];
 
     for(int i = 0; i < *length; i++){
-        full_frame[i+4] = stuffed_frame[i]; // i+4 avança frame 0,1,2,3 e avança para campo de informação
+        full_frame[i+4] = stuffed_frame[i];
     }
 
     full_frame[*length + 4] = FLAG;
@@ -229,13 +213,12 @@ unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
 
 unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
 	unsigned char BCC2 = 0x00, *new_message = malloc((*bufSize + 1) * sizeof(unsigned char));
-	//BCC2 = 0x00 -> BCC2 = '\0' 
+	
     
     for(int i = 0; i < *bufSize; i++) {
 		new_message[i] = buf[i];
 		BCC2 ^= buf[i];
-        }
-	//BCC2 = BCC2 XOR buf[i], meaning, the result bit is 1 if the corresponding bits of two operands are opposite.
+	}
 	
     new_message[*bufSize] = BCC2;
 	*bufSize += 1;
@@ -247,20 +230,18 @@ unsigned char* create_frame(const unsigned char* buf, int* bufSize) {
 }
 
 
-unsigned char* remove_supervision_frame(unsigned char* message, int* length) 
-//função que remove o frame de supervisão para que possamos ficar apenas com os dados do ficheiro
-{
+unsigned char* remove_supervision_frame(unsigned char* message, int* length) {
     unsigned char* control_message = malloc((*length -5) *sizeof(unsigned char));
 
-    for (int i = 4, j = 0; i < *length; i++ , j++){ //passa a frente o frame de supervisao ao começar em i=4 (acho)
-        control_message[j] = message[i]; //copia o os frames com informaçao de message para control_message
+    for (int i = 4, j = 0; i < *length; i++ , j++){
+        control_message[j] = message[i];
     }
 
-    *length +=5; // ???
+    *length +=5;
 
     free(message);
 
-    return control_message; //retorna message sem o frame de supervisao
+    return control_message;   
 }
 
 unsigned char* BCC2(unsigned char* control_message, int* length){
@@ -287,15 +268,14 @@ unsigned char* BCC2(unsigned char* control_message, int* length){
     return data_message;
 }
 
-int send_RR_REJ(int fd, unsigned int type, unsigned char c) //Envia RR no caso de ter sido enviado corretamente e REJ se acontecer o oposto
-{
+int send_RR_REJ(int fd, unsigned int type, unsigned char c){
     unsigned char bool_val, response[5];
     
     response[0] = FLAG;
     response[1] = ADDRESS_T;
     response[4] = FLAG;
 
-    if( c == 0x00){ 
+    if( c == 0x00){
         bool_val = FALSE;
     }
     else{
@@ -413,11 +393,11 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int length){
-    unsigned char* full_message = create_frame(buf, &length), elem, frame[5];
+int llwrite(const unsigned char *buf, int bufSize){
+    unsigned char* full_message = create_frame(buf, &bufSize), elem, frame[5];
     int res, frame_length = 0, state = S0;
 
-    if(length < 0)
+    if(bufSize < 0)
         return FALSE;
 
     alarmCount = 1;
@@ -426,14 +406,14 @@ int llwrite(const unsigned char *buf, int length){
     STOP = FALSE;
 
     while (alarmEnabled == TRUE && connectionParameters_ptr->nRetransmissions > alarmCount){
-        res = write(fd,full_message, length);
+        res = write(fd,full_message, bufSize);
         alarm(connectionParameters_ptr->timeout);
         alarmEnabled = FALSE;
 
         //Wait for response
 
         while( alarmEnabled == FALSE && STOP == FALSE){
-        res = read(fd,&elem, length);
+        res = read(fd,&elem, bufSize);
 
             if(res > 0){
                 frame_length++;
@@ -462,67 +442,43 @@ int llwrite(const unsigned char *buf, int length){
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-unsigned char* llread(int fd, int* length) {
+int llread(unsigned char *packet){
     unsigned int message_array_length = 138;
-	unsigned char elem, *message = malloc(message_array_length * sizeof(unsigned char)), *finish = malloc(1 * sizeof(unsigned char));
-	int res, state = S0;
+    unsigned char elem, *message = malloc(message_array_length * sizeof(unsigned char)), *finish = malloc(sizeof(unsigned char));
 
-	*length = 0;
-	flag_error = 0;
-	STOP = FALSE;
-	finish[0] = DISC;
-	
-    while(STOP == FALSE) {
-		res = read(fd, &elem, 1);
-		
-        if(res > 0) {
-			*length += 1;
-			
-            if(message_array_length <= *length) {
-				message_array_length *= 2;
-				message = realloc(message, message_array_length * sizeof(unsigned char));
-			}
-			state_machine(elem, &state, message, length, FRAME_I);
-		}
-	}
+    int res, state = S0,lenght = 0;
 
-	if(message[4] == ADDRESS_R && flag_error != 1) {
-		message = BCC1_random_error(message, *length);
-		message = BCC2_random_error(message, *length);
-	}
+    ERROR_FLAG = FALSE;
+    STOP = FALSE;
+    finish[0] = DISC;
 
-	if(flag_error == 1 || message[2] == CONTROL_T || message[2] == CONTROL_R)
-		return NULL;
+    while(STOP == FALSE){
+        res = read(fd, &elem,1);
 
-	if(message[2] == DISC) {
-		llclose(fd, RECEIVER);
-		return finish;
-	}
+        if(res > 0){
+            lenght++;
 
-	duplicate = (control_values[datalink.control_value] == message[2]) ? FALSE : TRUE;
-	unsigned char temp = message[2], *no_head_message = remove_supervision_frame(message, length), *no_BCC2_message = BCC2(no_head_message, length);
+            if(message_array_length < lenght){
+                message_array_length *= 2;
+                message = realloc(message, message_array_length * sizeof(unsigned char));
+            }
 
-	if(*length == -1) {
-		if(duplicate == TRUE) { // se recebeu trama duplicada envia RR receiver ready 
-			send_RR_REJ(fd, RR, temp);
-			return NULL;
-		}
-		else {
-			send_RR_REJ(fd, REJ, temp);
-			return NULL;
-		}
-	}
+            state_handler(elem,&state,message,lenght,FRAME_I);
+        }
+    }
 
-	else {
-		if(duplicate != TRUE) {
-			datalink.control_value = send_RR_REJ(fd, RR, temp);
-			return no_BCC2_message;
-		}
-		else {
-			send_RR_REJ(fd, RR, temp);
-			return NULL;
-		}
-	}
+    if (message[4] == ADDRESS_R && ERROR_FLAG == FALSE){
+        //random error functions
+    }
+
+    if(ERROR_FLAG == TRUE || message[2] == CONTROL_T || message == CONTROL_R){
+        return '\0';
+    }
+
+    if (message[2] == DISC){
+        llclose(0);
+        return finish;
+    }
 
     return 0;
 }
