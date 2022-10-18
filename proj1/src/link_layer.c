@@ -41,7 +41,7 @@ void alarm_handler() {
 }
 
 void state_handler(unsigned char byte,State* stateData){
-    switch (*stateData -> curr_state){
+    switch (stateData -> curr_state){
         case SMREJ:
         case SMEND:
             stateData -> curr_state=SMSTART;
@@ -54,15 +54,110 @@ void state_handler(unsigned char byte,State* stateData){
             if(byte == ADR_TX || byte == ADR_RX){
                 stateData->curr_state=SMADR;
                 stateData->adr=byte;
-                break;
             }
             else if(byte == FLAG){
-                break;
+                //do nothing, because we want to remain in the same state, should probably remove this condition...
             }else{
                 stateData=SMSTART;
-                break;
             }
-            
+            break;
+        case SMADR:
+            if(byte == CTRL_UA     || byte == CTRL_SET
+            || byte == CTRL_DISC   || byte == CTRL_REJ(0)
+            || byte == CTRL_REJ(1) || byte == CTRL_DATA(0)
+            || byte == CTRL_DATA(1)|| byte == CTRL_RR(0)
+            || byte == byte == CTRL_RR(1)){
+                stateData->curr_state =SMCTRL;
+                stateData->ctrl = byte;
+                stateData->bcc = stateData->adr ^ stateData->ctrl;
+            }
+            else if (byte == FLAG){
+                stateData->curr_state=SMFLAG;
+            }else {
+                stateData->curr_state=SMSTART;
+            }
+            break;    
+        case SMCTRL:
+            if(byte == stateData->bcc){
+                stateData->curr_state=SMBCC1;
+            }
+            else if (byte == FLAG){
+                stateData->curr_state=SMFLAG;
+            }else{
+                stateData->curr_state=SMSTART;
+            }
+            break;
+        case SMBCC1:
+            if(byte==FLAG){
+                if(stateData->ctrl==CTRL_DATA(0) || stateData->ctrl==CTRL_DATA(0) ){
+                    stateData->curr_state=SMFLAG;
+                }else{
+                    stateData->curr_state=SMEND;
+                }
+            }else if( stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(1)){
+                if(stateData->curr_state != NULL){
+                    stateData->data_size = 0;
+                    if(byte == ESCAPE){
+                        stateData->curr_state = SMESC;
+                        stateData->bcc = 0;
+                    }else{
+                        stateData->data[stateData->data_size++] = byte;
+                        stateData->bcc = byte;
+                        stateData->curr_state = SMDATA;
+                    }
+                }
+            }else{
+                stateData->curr_state = SMSTART;
+            }
+            break;
+        case SMDATA:
+            if(byte == ESCAPE){
+                stateData->curr_state = SMESC;
+            }else if(byte = FLAG){
+                stateData->curr_state = SMREJ;
+            }else if(byte == stateData->bcc){
+                stateData->curr_state = SMBCC2;
+            }else{
+                stateData->data[stateData->data_size++] = byte;
+                stateData->bcc^=byte;
+            }
+            break;
+        case SMESC:
+            if(byte == FLAG){
+                stateData ->curr_state = SMREJ; 
+            }else if(byte ==ESCAPE_FLAG){
+                if(stateData->bcc==FLAG){
+                    stateData->curr_state=SMBCC2;
+                }else{
+                    stateData->bcc^=FLAG;
+                    stateData->data[stateData->data_size++]=FLAG;
+                    stateData->curr_state=SMDATA;
+                }
+            }else if(byte == ESCAPE_ESCAPE){
+                if(stateData->bcc == ESCAPE){
+                    stateData->curr_state = SMBCC2;
+                }else{
+                    stateData->bcc^=ESCAPE;
+                    stateData->data[stateData->data_size++] = ESCAPE;
+                    stateData->curr_state = SMDATA;
+                }
+            }else{
+                stateData->curr_state=SMSTART;
+            }
+            break;
+        case SMBCC2:
+            if(byte == FLAG){
+                stateData->curr_state=SMEND;
+            }else if( byte == 0){
+                stateData->data[stateData->data_size++]=stateData->bcc;
+                stateData->bcc = 0;
+            }else{
+                stateData->data[stateData->data_size++]=stateData->bcc;
+                stateData->data[stateData->data_size++]=byte;
+                stateData->bcc=byte;
+                stateData->curr_state=SMDATA;
+            }
+            break;
     }
 }
 
