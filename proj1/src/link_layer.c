@@ -215,41 +215,30 @@ int set_as_receiver() {
 	return TRUE;
 }
 
-unsigned char* stuffing(unsigned char* message, int* length){
-    unsigned int array_length = *length;
-    unsigned char* str = malloc(array_length * sizeof(unsigned char));
-    int j = 0;
+unsigned char* stuffing(const unsigned char* message, int length, unsigned char* dest, unsigned char *bcc){
+    int dest_length = 0;
 
-    for(int i = 0; i < *length; i++, j++){
-        if(j >= array_length) {
-            array_length*=2;
-            str = realloc(str, array_length * sizeof(unsigned char));
-        }
-
-        if(message[i] == ESC) {
-			str[j] = ESC;
-			str[j + 1]= 0x5d;
-			j++;
+    for(int i = 0; i < length; i++){
+        *bcc^=message[i];
+        if(message[i] == ESCAPE) {
+			dest[dest_length++] = ESCAPE;
+			dest[dest_length++]= ESCAPE_ESCAPE;
+			break;
 		}
 
-		else if(message[i] ==  0x7e) {
-			str[j] = ESC;
-			str[j + 1] = 0x5e;
-			j++;
-		}
-
-		else{
-            str[j] = message[i];
+		else if(message[i] ==  FLAG) {
+			dest[dest_length++] = ESCAPE;
+			dest[dest_length++] = ESCAPE_FLAG;
+			break;
+		}else{
+            dest[dest_length++] = message[i];
         }
     }
-    *length = j;
-    
-    free(message);
 
-    return str;
+    return dest_length;
 }
 
-unsigned char* destuffing(unsigned char* message, int* length) {
+unsigned char* destuffing(unsigned char* message, int* length) {/*REDO THIS TO BE IN LINE WITH NEW stuffing function
     unsigned int array_length = 133;
     unsigned char* str = malloc(array_length * sizeof(unsigned char));
     int new_length = 0;
@@ -283,6 +272,8 @@ unsigned char* destuffing(unsigned char* message, int* length) {
     free(message); 
     
     return str;
+    */
+   return -1;
 }
 
 unsigned char* frame_header(unsigned char* stuffed_frame, int* length){
