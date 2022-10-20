@@ -47,12 +47,12 @@ int stuffing(const unsigned char* message, int length, unsigned char* dest, unsi
 
     for(int i = 0; i < length; i++){
         if(bcc!=NULL){//if bcc isnt checked for null, funky things will happen
-            *bcc^=message[i];
+            *bcc ^= message[i];
         }
         
         if(message[i] == ESCAPE) {
 			dest[destLenght++] = ESCAPE;
-			dest[destLenght++]= ESCAPE_ESCAPE;
+			dest[destLenght++] = ESCAPE_ESCAPE;
 			break;
 		}
 
@@ -296,7 +296,7 @@ int llopen(LinkLayer connectionParameters)
     else if (connection.role == LlRx){//set as receiver
         alarmCount = 0;
         
-        stateData.currState=START;
+        stateData.currState = START;
         int receivedSET = FALSE;
             while(receivedSET == FALSE){
                 int bytes_read = read(fd, buf, PACKET_SIZE_LIMIT);
