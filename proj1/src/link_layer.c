@@ -269,8 +269,8 @@ int llopen(LinkLayer connectionParameters)
         alarmCount=0;
         while(alarmCount<connection.nRetransmissions && !receivedUA){
             alarm(connection.timeout);
-            alarmEnabled=1;
-            if(alarmCount>0){
+            alarmEnabled = TRUE;
+            if(alarmCount > 0){
                 puts("Timed out.\n");
             }
             int size = buildFrame(buf,ADR_TX,CTRL_SET);
@@ -279,35 +279,39 @@ int llopen(LinkLayer connectionParameters)
             puts("HELLO" + size);
             while(alarmEnabled && !receivedUA){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
-                if(bytes_read<0)
+                if(bytes_read < 0)
                     return -1;
-                for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
-                    state_handler(buf[i],&stateData);
-                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
+                for(unsigned int i = 0;i < bytes_read && !receivedUA; ++i){
+                    state_handler(buf[i], &stateData);
+                    if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_UA)
                         receivedUA=1;
                 }
             }
         }
-        if(receivedUA) puts("llopen: Received UA.\n");
+        if(receivedUA){
+            puts("llopen: Received UA.\n");
+        } 
         return 1;
     }
     else if (connection.role == LlRx){//set as receiver
-        alarmCount=0;
+        alarmCount = 0;
         
         stateData.currState=START;
-        int receivedSET=0;
-            while(!receivedSET){
-                int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
-                if(bytes_read<0)
+        int receivedSET = FALSE;
+            while(receivedSET == FALSE){
+                int bytes_read = read(fd, buf, PACKET_SIZE_LIMIT);
+                if(bytes_read < 0)
                     return -1;
-                for(unsigned int i=0;i<bytes_read && !receivedSET;++i){
-                    state_handler(buf[i],&stateData);
-                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET)
-                        receivedSET=1;
+                for(unsigned int i = 0;i < bytes_read && !receivedSET; ++i){
+                    state_handler(buf[i], &stateData);
+                    if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET)
+                        receivedSET = TRUE;
                 }
             }
-            if(receivedSET) puts("llopen: Received Set.\n");
-            int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);//Build UA FRAME
+            if(receivedSET == TRUE){
+                puts("llopen: Received Set.\n");
+            } 
+            int frame_size = buildFrame(buf,ADR_TX,CTRL_UA);//Build UA FRAME
             write(fd,buf,frame_size); //sends UA reply.
             puts("llopen: Sent UA.\n");
             return 1;
@@ -320,28 +324,28 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize){
     unsigned char bigBuf[bufSize*2+100];
-    int frame_size=buildDataFrame(bigBuf,buf,bufSize,ADR_TX,CTRL_DATA(DATA_S_FLAG));
+    int frame_size = buildDataFrame(bigBuf,buf,bufSize,ADR_TX,CTRL_DATA(DATA_S_FLAG));
     
-    for(unsigned int sent=0;sent<frame_size;){ //In case write doesnt write all bytes from the first call.
-        int ret=write(fd,bigBuf+sent,frame_size-sent);
-        if(ret==-1){
+    for(unsigned int sent = 0;sent < frame_size;){ //In case write doesnt write all bytes from the first call.
+        int ret = write(fd,bigBuf+sent,frame_size-sent);
+        if(ret == -1){
             return -1;
         }
         sent+=ret;
     }
 
-    int receivedPacket=0, resend=0, retransmissions=0;
+    int receivedPacket = FALSE, resend = FALSE, retransmissions = 0;
     stateData.data=NULL; //State machine writes to packet buffer directly.
     
-    alarmEnabled=1;
+    alarmEnabled = TRUE;
     alarm(connection.timeout);
-    while(!receivedPacket){
-        if(!alarmEnabled){
-            resend=1;
-            alarmEnabled=1;
+    while(receivedPacket == FALSE){
+        if(alarmEnabled == FALSE){
+            resend = TRUE;
+            alarmEnabled = TRUE;
             alarm(connection.timeout);
         }
-        if(resend){
+        if(resend == TRUE){
             if(retransmissions==connection.nRetransmissions){
                 puts("Exceeded retransmission limit.\n");
                 return -1;
@@ -352,7 +356,7 @@ int llwrite(const unsigned char *buf, int bufSize){
                     return -1;
                 sent+=ret;
             }
-            resend=0;
+            resend = FALSE;
             retransmissions++;
         }
         int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
@@ -362,7 +366,7 @@ int llwrite(const unsigned char *buf, int bufSize){
             state_handler(buf[i],&stateData);
             if(stateData.currState == END_RCV){
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_RR(DATA_S_FLAG)){
-                    receivedPacket = 1;
+                    receivedPacket = TRUE;
                     break;
                 }
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_REJ(DATA_S_FLAG)){
@@ -422,7 +426,7 @@ int llread(unsigned char *packet){
                 }
             }
             if(stateData.ctrl == CTRL_DISC) {
-                DISCreceived = 1;
+                DISCreceived = TRUE;
                 puts("llread: Received DISC.\n");
                 return -1;
             }
@@ -446,7 +450,7 @@ int llclose(int showStatistics){
         
         while(alarmCount<connection.nRetransmissions && !DISCreceived_tx){
             alarm(connection.timeout);
-            alarmEnabled=1;
+            alarmEnabled = TRUE;
             if(alarmCount > 0)
                 puts("Timed out.\n");
             int size = buildFrame(buf,ADR_TX,CTRL_DISC);
@@ -488,7 +492,7 @@ int llclose(int showStatistics){
         write(fd,buf,frame_size); 
         puts("llclose: Sent DISC.\n");
 
-        int receivedUA = 0;
+        int receivedUA = FALSE;
         while(!receivedUA){
             int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
             if(bytes_read<0)
