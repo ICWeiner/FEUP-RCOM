@@ -7,12 +7,12 @@
 #include <stdio.h>
 
 
-unsigned char applicationbuffer[PACKET_SIZE_LIMIT + 30];
+unsigned char applicationbuffer[PACKET_SIZE_LIMIT];
 
 int get_type_length_value(unsigned char *address, unsigned char* type, unsigned char* length, unsigned char** value){
-	*type = address[0];
-	*length = address[1];
-	*value = address + 2;
+	*type   = address[0] ;
+	*length = address[1] ;
+	*value  = address + 2;
 
 	return 2 + *length;//returns total size of TYPE + LENGTH + VALUE 
 }
@@ -20,7 +20,7 @@ int get_type_length_value(unsigned char *address, unsigned char* type, unsigned 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
-    // application layer figures out what it has to do and uses functions 
+    //application layer figures out what it has to do and uses functions 
     //from link_layer to do it
 
     //struct holding necessary date for the link layer
@@ -59,8 +59,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 		}
 
 		fseek(file,0L,SEEK_END);
-		long int file_size = ftell(file);
-		fseek(file,0,SEEK_SET);
+		long int fileSize = ftell(file);//find end of file
+
+		fseek(file,0,SEEK_SET);//return to begining of file
 
 		//TODO write file size?
 
@@ -68,19 +69,19 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 		applicationbuffer[1] = TYPE_FILESIZE;
 		applicationbuffer[2] = sizeof(long);
 
-		*(long*)(applicationbuffer+3)=file_size;
+		*(long*)(applicationbuffer+3) = fileSize;
 		llwrite(applicationbuffer,10);
 
-		unsigned char failure = 0;
-		unsigned long bytes_sent = 0;
+		unsigned char FAIL_FLAG = 0;
+		unsigned long bytesTransmitted = 0;
 
-		for(unsigned char i = 0; bytes_sent < file_size;++i){
-			int bytequant = file_size - bytes_sent< (PACKET_SIZE)? file_size-bytes_sent : (PACKET_SIZE);
+		for(unsigned char i = 0; bytesTransmitted < fileSize;++i){
+			int bytequant = fileSize - bytesTransmitted < (MAX_PAYLOAD_SIZE)? fileSize - bytesTransmitted : (MAX_PAYLOAD_SIZE);
 			unsigned long file_bytes = fread(applicationbuffer + 4, 1, bytequant, file);
 
 			if(file_bytes != bytequant){
                 puts("File read failure");//TODO write file size?
-                failure=TRUE;
+                FAIL_FLAG=TRUE;
                 break;
             }
 
@@ -89,16 +90,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			applicationbuffer[2] = file_bytes>>8;
 			applicationbuffer[3] = file_bytes%256;
 
-			if(llwrite(applicationbuffer,file_bytes +4 ) < 0){
+			if(llwrite(applicationbuffer,file_bytes + 4) < 0){
 				puts("ERROR: failure on writing");
-				failure = TRUE;
+				FAIL_FLAG = TRUE;
 				break;
 			}else{
-				puts("Sent packet with this many bytes:" + bytequant);
+				puts("Sent packet with this many bytes:");
+				//puts(bytequant); fix tis
 			}
-			bytes_sent += bytequant; 
+			bytesTransmitted += bytequant; 
 		}
-		if(failure == FALSE){
+		if(FAIL_FLAG == FALSE){
 			applicationbuffer[0] = CONTROL_END;
 
 			if(llwrite(applicationbuffer,1) < 0){
@@ -109,16 +111,18 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 		}fclose(file);
 
 	}else if(connection.role == LlRx){
-		long int file_size = 0 , file_size_received = 0;
+		long int fileSize = 0 , fileSizeReceived = 0; //fileSizeReceived is an accumulator to count bytes received, should end qual to fileSize
 		int bytes_read = llread(applicationbuffer);
 		unsigned char t,l,*v;
 
 		if(applicationbuffer[0] == CONTROL_START){
 			int offset = 1;
+			unsigned char FINISH_EARLY = FALSE, last_sequence_number=0;
+
 			for(;offset<bytes_read;){
 				offset+=get_type_length_value(applicationbuffer+offset,&t,&l,&v);
 				if(t==TYPE_FILESIZE){
-					file_size = *((unsigned long*)v);
+					fileSize = *((unsigned long*)v);
 					//TODO: WRITE FILESIZE
 					}
 			}
@@ -131,11 +135,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 				puts("Successfully opened file to write");
 			}
 
-			unsigned char FINISH_EARLY = FALSE, last_sequence_number=0;
-            for(;file_size_received < file_size;){
-                int numbytes=llread(applicationbuffer);
-                if(numbytes<1){
-                    if(numbytes==-1)
+            for(;fileSizeReceived < fileSize;){
+                int numbytes = llread(applicationbuffer);
+                if(numbytes < 1){
+                    if(numbytes == -1)
                         puts("error on llread");
                     else
                         puts("Received a packet that is too small");
@@ -161,9 +164,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 							puts("was:" +  (numbytes-4));
 							puts("expected:" + size);
 						}
-						fwrite(applicationbuffer+4,1,size,file);
-						file_size_received += size;
-						puts("received packet with number:" + (last_sequence_number++));
+						fwrite(applicationbuffer + 4, 1, size, file);
+						fileSizeReceived += size;
+						last_sequence_number++;
+						puts("received packet with number:" );
                     }
                 }
             }
@@ -179,17 +183,16 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 						puts(numbytes + " bytes)");
 					}
                 }
-                if(applicationbuffer[0]!=CONTROL_END){
+                if(applicationbuffer[0] != CONTROL_END){
                     puts("Received wrong packet type. Expected packet type: control end .");
                 }else{
                     puts("Received packet of type end.closing\n");
                 }
-            }
-			
+            }	
         }else{
             puts("Transmission didn't start with a start packet.\n");
-            for(unsigned int i=0;i<10;++i){
-				puts(applicationbuffer[i]);
+            for(unsigned int i = 0;i < 10;++i){
+				puts(applicationbuffer[i]);//why did i need this again?
 			}
         }
 		

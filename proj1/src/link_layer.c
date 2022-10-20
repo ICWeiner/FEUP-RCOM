@@ -13,7 +13,7 @@
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 typedef struct {
-    state curr_state;
+    state currState;
     unsigned char adr;
     unsigned char ctrl;
     unsigned char bcc;
@@ -43,7 +43,7 @@ void alarm_handler() {
 
 
 int stuffing(const unsigned char* message, int length, unsigned char* dest, unsigned char *bcc){
-    int dest_length = 0;
+    int destLenght = 0;
 
     for(int i = 0; i < length; i++){
         if(bcc!=NULL){//if bcc isnt checked for null, funky things will happen
@@ -51,21 +51,21 @@ int stuffing(const unsigned char* message, int length, unsigned char* dest, unsi
         }
         
         if(message[i] == ESCAPE) {
-			dest[dest_length++] = ESCAPE;
-			dest[dest_length++]= ESCAPE_ESCAPE;
+			dest[destLenght++] = ESCAPE;
+			dest[destLenght++]= ESCAPE_ESCAPE;
 			break;
 		}
 
 		else if(message[i] ==  FLAG) {
-			dest[dest_length++] = ESCAPE;
-			dest[dest_length++] = ESCAPE_FLAG;
+			dest[destLenght++] = ESCAPE;
+			dest[destLenght++] = ESCAPE_FLAG;
 			break;
 		}else{
-            dest[dest_length++] = message[i];
+            dest[destLenght++] = message[i];
         }
     }
 
-    return dest_length;
+    return destLenght;
 }
 
 int buildFrame(unsigned char* buffer, unsigned char address, unsigned char control){
@@ -78,33 +78,33 @@ int buildFrame(unsigned char* buffer, unsigned char address, unsigned char contr
     return 5;
 }
 int buildDataFrame(unsigned char* framebuf, const unsigned char* data,unsigned int data_size, unsigned char address, unsigned char control){
-    framebuf[0]= FLAG;
-    framebuf[1]= address;
-    framebuf[2]= control;
-    framebuf[3]= address ^ control;
-    int offset=0;
-    unsigned char bcc=0;
-    for(unsigned int i=0;i<data_size;++i){
-        offset+=stuffing(data+i,1,framebuf+offset+4,&bcc);
+    framebuf[0] = FLAG;
+    framebuf[1] = address;
+    framebuf[2] = control;
+    framebuf[3] = address ^ control;
+    int offset = 0;
+    unsigned char bcc = 0;
+    for(unsigned int i = 0;i < data_size;++i){
+        offset+=stuffing(data + i, 1, framebuf + offset + 4, &bcc);
     }
     offset += stuffing(&bcc,1,framebuf+offset+4,NULL);
-    framebuf[4+offset]=FLAG;
+    framebuf[4 + offset]=FLAG;
     return 5 + offset;
 }
 
 void state_handler(unsigned char byte,State* stateData){
-    switch (stateData -> curr_state){
+    switch (stateData -> currState){
         case SMREJ:
         case SMEND:
-            stateData -> curr_state=SMSTART;
+            stateData -> currState=SMSTART;
         case SMSTART:
             if(byte == FLAG){
-                stateData ->curr_state = SMFLAG;
+                stateData ->currState = SMFLAG;
             }break;
         case SMFLAG:
             stateData->data_size = 0;
             if(byte == ADR_TX || byte == ADR_RX){
-                stateData->curr_state=SMADR;
+                stateData->currState=SMADR;
                 stateData->adr=byte;
             }else if(byte == FLAG){
                 //do nothing, because we want to remain in the same state, should probably remove this condition...
@@ -118,56 +118,56 @@ void state_handler(unsigned char byte,State* stateData){
             || byte == CTRL_REJ(1) || byte == CTRL_DATA(0)
             || byte == CTRL_DATA(1)|| byte == CTRL_RR(0)
             || byte == CTRL_RR(1)){
-                stateData->curr_state =SMCTRL;
+                stateData->currState =SMCTRL;
                 stateData->ctrl = byte;
                 stateData->bcc = stateData->adr ^ stateData->ctrl;
             }
             else if (byte == FLAG){
-                stateData->curr_state=SMFLAG;
+                stateData->currState=SMFLAG;
             }else {
-                stateData->curr_state=SMSTART;
+                stateData->currState=SMSTART;
             }
             break;    
         case SMCTRL:
             if(byte == stateData->bcc){
-                stateData->curr_state=SMBCC1;
+                stateData->currState=SMBCC1;
             }
             else if (byte == FLAG){
-                stateData->curr_state=SMFLAG;
+                stateData->currState=SMFLAG;
             }else{
-                stateData->curr_state=SMSTART;
+                stateData->currState=SMSTART;
             }
             break;
         case SMBCC1:
             if(byte==FLAG){
                 if(stateData->ctrl==CTRL_DATA(0) || stateData->ctrl==CTRL_DATA(0) ){
-                    stateData->curr_state=SMFLAG;
+                    stateData->currState=SMFLAG;
                 }else{
-                    stateData->curr_state=SMEND;
+                    stateData->currState=SMEND;
                 }
             }else if( stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(1)){
                 if(stateData->data != NULL){
                     stateData->data_size = 0;
                     if(byte == ESCAPE){
-                        stateData->curr_state = SMESC;
+                        stateData->currState = SMESC;
                         stateData->bcc = 0;
                     }else{
                         stateData->data[stateData->data_size++] = byte;
                         stateData->bcc = byte;
-                        stateData->curr_state = SMDATA;
+                        stateData->currState = SMDATA;
                     }
                 }
             }else{
-                stateData->curr_state = SMSTART;
+                stateData->currState = SMSTART;
             }
             break;
         case SMDATA:
             if(byte == ESCAPE){
-                stateData->curr_state = SMESC;
+                stateData->currState = SMESC;
             }else if(byte == FLAG){
-                stateData->curr_state = SMREJ;
+                stateData->currState = SMREJ;
             }else if(byte == stateData->bcc){
-                stateData->curr_state = SMBCC2;
+                stateData->currState = SMBCC2;
             }else{
                 stateData->data[stateData->data_size++] = byte;
                 stateData->bcc^=byte;
@@ -175,43 +175,43 @@ void state_handler(unsigned char byte,State* stateData){
             break;
         case SMESC:
             if(byte == FLAG){
-                stateData ->curr_state = SMREJ; 
+                stateData ->currState = SMREJ; 
             }else if(byte ==ESCAPE_FLAG){
                 if(stateData->bcc==FLAG){
-                    stateData->curr_state=SMBCC2;
+                    stateData->currState=SMBCC2;
                 }else{
                     stateData->bcc^=FLAG;
                     stateData->data[stateData->data_size++]=FLAG;
-                    stateData->curr_state=SMDATA;
+                    stateData->currState=SMDATA;
                 }
             }else if(byte == ESCAPE_ESCAPE){
                 if(stateData->bcc == ESCAPE){
-                    stateData->curr_state = SMBCC2;
+                    stateData->currState = SMBCC2;
                 }else{
                     stateData->bcc^=ESCAPE;
                     stateData->data[stateData->data_size++] = ESCAPE;
-                    stateData->curr_state = SMDATA;
+                    stateData->currState = SMDATA;
                 }
             }else{
-                stateData->curr_state=SMSTART;
+                stateData->currState=SMSTART;
             }
             break;
         case SMBCC2:
             if(byte == FLAG){
-                stateData->curr_state=SMEND;
+                stateData->currState=SMEND;
             }else if( byte == 0){
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->bcc = 0;
             }else if(byte == ESCAPE){
                 stateData->data[stateData->data_size++]=stateData->bcc;    
                 stateData->bcc=0;
-                stateData->curr_state=SMESC;
+                stateData->currState=SMESC;
             }
             else{
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->data[stateData->data_size++]=byte;
                 stateData->bcc=byte;
-                stateData->curr_state=SMDATA;
+                stateData->currState=SMDATA;
             }
             break;
     }
@@ -265,7 +265,7 @@ int llopen(LinkLayer connectionParameters)
 
     if(connection.role == LlTx){ //set as transmitter
         int receivedUA=0;
-        stateData.curr_state=SMSTART;
+        stateData.currState=SMSTART;
         alarmCount=0;
         while(alarmCount<connection.nRetransmissions && !receivedUA){
             alarm(connection.timeout);
@@ -283,7 +283,7 @@ int llopen(LinkLayer connectionParameters)
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
+                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
                         receivedUA=1;
                 }
             }
@@ -294,7 +294,7 @@ int llopen(LinkLayer connectionParameters)
     else if (connection.role == LlRx){//set as receiver
         alarmCount=0;
         
-        stateData.curr_state=SMSTART;
+        stateData.currState=SMSTART;
         int receivedSET=0;
             while(!receivedSET){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
@@ -302,7 +302,7 @@ int llopen(LinkLayer connectionParameters)
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !receivedSET;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET)
+                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET)
                         receivedSET=1;
                 }
             }
@@ -324,8 +324,9 @@ int llwrite(const unsigned char *buf, int bufSize){
     
     for(unsigned int sent=0;sent<frame_size;){ //In case write doesnt write all bytes from the first call.
         int ret=write(fd,bigBuf+sent,frame_size-sent);
-        if(ret==-1)
+        if(ret==-1){
             return -1;
+        }
         sent+=ret;
     }
 
@@ -359,7 +360,7 @@ int llwrite(const unsigned char *buf, int bufSize){
             return -1;
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){ 
             state_handler(buf[i],&stateData);
-            if(stateData.curr_state == SMEND){
+            if(stateData.currState == SMEND){
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_RR(DATA_S_FLAG)){
                     receivedPacket = 1;
                     break;
@@ -387,21 +388,21 @@ int llread(unsigned char *packet){
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){
             state_handler(buf[i],&stateData);
             
-            if(stateData.curr_state>=SMBCC1 && stateData.data!=NULL){//WIP
+            if(stateData.currState >= SMBCC1 && stateData.data != NULL){//WIP
                 //printf("(state:%i,packet:%i,data_size:%i,last_data:%i)\n",state.state,packet[i], state.data_size,state.data[state.data_size-1]);
             }
 
-            if(stateData.curr_state==SMREJ && stateData.adr==ADR_TX){
+            if(stateData.currState == SMREJ && stateData.adr == ADR_TX){
                 int frame_size=buildFrame(buf,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)));
                 write(fd,buf,frame_size); //sends REJ reply.
                 puts("llread: Sent REJ.\n");
             }
-            if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET){
+            if(stateData.currState == SMEND && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET){
                 int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);
                 write(fd,buf,frame_size); //sends UA reply.
                 puts("llread: Sent UA.\n");
             }
-            if(stateData.curr_state==SMEND && stateData.adr==ADR_TX){//TODO:too much duplicate code?
+            if(stateData.currState == SMEND && stateData.adr == ADR_TX){//TODO:too much duplicate code?
                 if(stateData.ctrl == CTRL_DATA(0)){
                     int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
@@ -420,7 +421,7 @@ int llread(unsigned char *packet){
                     puts("llread: Sent RR\n"+ DATA_S_FLAG);
                 }
             }
-            if(stateData.ctrl==CTRL_DISC) {
+            if(stateData.ctrl == CTRL_DISC) {
                 DISCreceived = 1;
                 puts("llread: Received DISC.\n");
                 return -1;
@@ -446,7 +447,7 @@ int llclose(int showStatistics){
         while(alarmCount<connection.nRetransmissions && !DISCreceived_tx){
             alarm(connection.timeout);
             alarmEnabled=1;
-            if(alarmCount>0)
+            if(alarmCount > 0)
                 puts("Timed out.\n");
             int size = buildFrame(buf,ADR_TX,CTRL_DISC);
             puts("llclose: Sent DISC.\n");
@@ -457,7 +458,7 @@ int llclose(int showStatistics){
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !DISCreceived_tx;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
+                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                         DISCreceived_tx=1;
                 }
             }
@@ -466,36 +467,41 @@ int llclose(int showStatistics){
         int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);//Build UA
         write(fd,buf,frame_size);
         puts("llclose: Sent UA.\n");
+        sleep(1);
 
     } else { //Receiver
 
         while(!DISCreceived){
             int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
-            if(bytes_read<0)
+            if(bytes_read < 0)
                 return -1;
             for(unsigned int i=0;i<bytes_read && !DISCreceived;++i){
                 state_handler(buf[i],&stateData);
-                if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
+                if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                     DISCreceived=1;
             }
         }
-        if(DISCreceived) puts("llclose: Received DISC .\n");
+        if(DISCreceived){
+            puts("llclose: Received DISC .\n");
+        } 
         int frame_size=buildFrame(buf,ADR_TX,CTRL_DISC);//BUILD DISC
         write(fd,buf,frame_size); 
         puts("llclose: Sent DISC.\n");
 
-        int receivedUA=0;
+        int receivedUA = 0;
         while(!receivedUA){
             int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
             if(bytes_read<0)
                 return -1;
             for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
                 state_handler(buf[i],&stateData);
-                if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
+                if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
                     receivedUA=1;
             }
         }
-        if(receivedUA) puts("llclose: Received UA .\n");
+        if(receivedUA){
+            puts("llclose: Received UA .\n");
+        } 
     }
 
     // Restore the old port settings
