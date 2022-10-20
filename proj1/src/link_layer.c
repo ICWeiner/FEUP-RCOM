@@ -39,8 +39,57 @@ unsigned char DATA_S_FLAG = 0; //this could probably be an int
 void alarm_handler() {
     alarmEnabled = FALSE;
     alarmCount++;
+}
 
-    //printf("Alarm #%d\n", alarmCount);
+
+int stuffing(const unsigned char* message, int length, unsigned char* dest, unsigned char *bcc){
+    int dest_length = 0;
+
+    for(int i = 0; i < length; i++){
+        if(bcc!=NULL){//if bcc isnt checked for null, funky things will happen
+            *bcc^=message[i];
+        }
+        
+        if(message[i] == ESCAPE) {
+			dest[dest_length++] = ESCAPE;
+			dest[dest_length++]= ESCAPE_ESCAPE;
+			break;
+		}
+
+		else if(message[i] ==  FLAG) {
+			dest[dest_length++] = ESCAPE;
+			dest[dest_length++] = ESCAPE_FLAG;
+			break;
+		}else{
+            dest[dest_length++] = message[i];
+        }
+    }
+
+    return dest_length;
+}
+
+int buildFrame(unsigned char* buffer, unsigned char address, unsigned char control){
+    
+    buffer[0] = FLAG;
+    buffer[1] = address;
+    buffer[2] = control;
+    buffer[3] = address ^ control;
+    buffer[4] = FLAG;
+    return 5;
+}
+int buildDataFrame(unsigned char* framebuf, const unsigned char* data,unsigned int data_size, unsigned char address, unsigned char control){
+    framebuf[0]= FLAG;
+    framebuf[1]= address;
+    framebuf[2]= control;
+    framebuf[3]= address ^ control;
+    int offset=0;
+    unsigned char bcc=0;
+    for(unsigned int i=0;i<data_size;++i){
+        offset+=stuffing(data+i,1,framebuf+offset+4,&bcc);
+    }
+    offset += stuffing(&bcc,1,framebuf+offset+4,NULL);
+    framebuf[4+offset]=FLAG;
+    return 5 + offset;
 }
 
 void state_handler(unsigned char byte,State* stateData){
@@ -51,14 +100,13 @@ void state_handler(unsigned char byte,State* stateData){
         case SMSTART:
             if(byte == FLAG){
                 stateData ->curr_state = SMFLAG;
-            }
-            break;
+            }break;
         case SMFLAG:
+            stateData->data_size = 0;
             if(byte == ADR_TX || byte == ADR_RX){
                 stateData->curr_state=SMADR;
                 stateData->adr=byte;
-            }
-            else if(byte == FLAG){
+            }else if(byte == FLAG){
                 //do nothing, because we want to remain in the same state, should probably remove this condition...
             }else{
                 stateData=SMSTART;
@@ -69,7 +117,7 @@ void state_handler(unsigned char byte,State* stateData){
             || byte == CTRL_DISC   || byte == CTRL_REJ(0)
             || byte == CTRL_REJ(1) || byte == CTRL_DATA(0)
             || byte == CTRL_DATA(1)|| byte == CTRL_RR(0)
-            || byte == byte == CTRL_RR(1)){
+            || byte == CTRL_RR(1)){
                 stateData->curr_state =SMCTRL;
                 stateData->ctrl = byte;
                 stateData->bcc = stateData->adr ^ stateData->ctrl;
@@ -98,7 +146,7 @@ void state_handler(unsigned char byte,State* stateData){
                     stateData->curr_state=SMEND;
                 }
             }else if( stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(1)){
-                if(stateData->curr_state != NULL){
+                if(stateData->data != NULL){
                     stateData->data_size = 0;
                     if(byte == ESCAPE){
                         stateData->curr_state = SMESC;
@@ -116,7 +164,7 @@ void state_handler(unsigned char byte,State* stateData){
         case SMDATA:
             if(byte == ESCAPE){
                 stateData->curr_state = SMESC;
-            }else if(byte = FLAG){
+            }else if(byte == FLAG){
                 stateData->curr_state = SMREJ;
             }else if(byte == stateData->bcc){
                 stateData->curr_state = SMBCC2;
@@ -154,7 +202,12 @@ void state_handler(unsigned char byte,State* stateData){
             }else if( byte == 0){
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->bcc = 0;
-            }else{
+            }else if(byte == ESCAPE){
+                stateData->data[stateData->data_size++]=stateData->bcc;    
+                stateData->bcc=0;
+                stateData->curr_state=SMESC;
+            }
+            else{
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->data[stateData->data_size++]=byte;
                 stateData->bcc=byte;
@@ -163,70 +216,6 @@ void state_handler(unsigned char byte,State* stateData){
             break;
     }
 }
-
-int stuffing(const unsigned char* message, int length, unsigned char* dest, unsigned char *bcc){
-    int dest_length = 0;
-
-    for(int i = 0; i < length; i++){
-        *bcc^=message[i];
-        if(message[i] == ESCAPE) {
-			dest[dest_length++] = ESCAPE;
-			dest[dest_length++]= ESCAPE_ESCAPE;
-			break;
-		}
-
-		else if(message[i] ==  FLAG) {
-			dest[dest_length++] = ESCAPE;
-			dest[dest_length++] = ESCAPE_FLAG;
-			break;
-		}else{
-            dest[dest_length++] = message[i];
-        }
-    }
-
-    return dest_length;
-}
-
-unsigned char* destuffing(unsigned char* message, int* length) {/*REDO THIS TO BE IN LINE WITH NEW stuffing function
-    unsigned int array_length = 133;
-    unsigned char* str = malloc(array_length * sizeof(unsigned char));
-    int new_length = 0;
-
-    for(int i = 0; i < *length; i++){
-        new_length++;
-
-        if(new_length >= array_length) {
-            array_length *= 2;
-            str = realloc(str, array_length * sizeof(unsigned char));
-        }
-
-        if(message[i] == ESC) {
-            if(message[i + 1] == 0x5d){
-                str[new_length - 1] = ESC;
-                i++;
-            }
-
-            else if(message[i + 1] == 0x5e){
-                str[new_length - 1] = FLAG;
-                i++;
-            }
-        }
-        else{
-            str[new_length - 1] = message[i];
-        }
-        
-    }
-    *length = new_length;
-
-    free(message); 
-    
-    return str;
-    */
-   return -1;
-}
-
-
-
 
 ////////////////////////////////////////////////
 // LLOPEN
@@ -262,7 +251,7 @@ int llopen(LinkLayer connectionParameters)
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
 
-    newtio.c_cc[VTIME] = 1; // Inter-character timer 
+    newtio.c_cc[VTIME] = 0; // Inter-character timer 
     newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
     
     tcflush(fd, TCIOFLUSH);
@@ -281,11 +270,13 @@ int llopen(LinkLayer connectionParameters)
         while(alarmCount<connection.nRetransmissions && !receivedUA){
             alarm(connection.timeout);
             alarmEnabled=1;
-            if(alarmCount>0)
-                printf("Timed out.\n");
-            int size = buildFrame(buf,NULL,0,ADR_TX,CTRL_SET,0);
-            printf("llopen: Sended SET.\n");
+            if(alarmCount>0){
+                puts("Timed out.\n");
+            }
+            int size = buildFrame(buf,ADR_TX,CTRL_SET);
+            puts("llopen: Sent SET.\n");
             write(fd,buf,size);
+            puts("HELLO" + size);
             while(alarmEnabled && !receivedUA){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
                 if(bytes_read<0)
@@ -297,7 +288,7 @@ int llopen(LinkLayer connectionParameters)
                 }
             }
         }
-        if(receivedUA) printf("llopen: Received UA.\n");
+        if(receivedUA) puts("llopen: Received UA.\n");
         return 1;
     }
     else if (connection.role == LlRx){//set as receiver
@@ -315,20 +306,12 @@ int llopen(LinkLayer connectionParameters)
                         receivedSET=1;
                 }
             }
-            if(receivedSET) printf("llopen: Received Set.\n");
-            int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_UA,0);//Build UA FRAME
+            if(receivedSET) puts("llopen: Received Set.\n");
+            int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);//Build UA FRAME
             write(fd,buf,frame_size); //sends UA reply.
-            printf("llopen: Sended UA.\n");
+            puts("llopen: Sent UA.\n");
             return 1;
         }
-
-    if(result == TRUE)
-        return fd;
-    else{//FAILED TO SET MODE, close attempted connection
-        llclose(0);
-        return -1;
-    }
-
     return fd;
 }
 
@@ -359,7 +342,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         }
         if(resend){
             if(retransmissions==connection.nRetransmissions){
-                printf("Exceeded retransmission limit.\n");
+                puts("Exceeded retransmission limit.\n");
                 return -1;
             }
             for(unsigned int sent=0;sent<frame_size;){
@@ -372,10 +355,10 @@ int llwrite(const unsigned char *buf, int bufSize){
             retransmissions++;
         }
         int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
-        if(bytes_read<0)
+        if(bytes_read < 0)
             return -1;
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){ 
-            state_machine(buf[i],&stateData);
+            state_handler(buf[i],&stateData);
             if(stateData.curr_state == SMEND){
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_RR(DATA_S_FLAG)){
                     receivedPacket = 1;
@@ -402,40 +385,45 @@ int llread(unsigned char *packet){
         if(bytes_read<0)
             return -1;
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){
-            state_machine(buf[i],&stateData);
+            state_handler(buf[i],&stateData);
             
             if(stateData.curr_state>=SMBCC1 && stateData.data!=NULL){//WIP
                 //printf("(state:%i,packet:%i,data_size:%i,last_data:%i)\n",state.state,packet[i], state.data_size,state.data[state.data_size-1]);
             }
 
             if(stateData.curr_state==SMREJ && stateData.adr==ADR_TX){
-                int frame_size=buildFrame(buf,0,0,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)),0);
+                int frame_size=buildFrame(buf,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)));
                 write(fd,buf,frame_size); //sends REJ reply.
-                printf("llread: Sended REJ.\n");
+                puts("llread: Sent REJ.\n");
             }
             if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET){
-                int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_UA,0);
+                int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);
                 write(fd,buf,frame_size); //sends UA reply.
-                printf("llread: Sended UA.\n");
+                puts("llread: Sent UA.\n");
             }
             if(stateData.curr_state==SMEND && stateData.adr==ADR_TX){//TODO:too much duplicate code?
                 if(stateData.ctrl == CTRL_DATA(0)){
-                    int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_RR(0),0);
+                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
-                    printf("llread: Sended RR.\n");
+                    puts("llread: Sent RR.\n" + DATA_S_FLAG);
                     return stateData.data_size;
                 }
-                if(stateData.ctrl == CTRL_DATA(1)){
-                    int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_RR(1),0);
+                else if(stateData.ctrl == CTRL_DATA(1)){
+                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(1));
                     write(fd,buf,frame_size);
-                    printf("llread: Sended RR.\n");
+                    puts("llread: Sent RR.\n" + DATA_S_FLAG);
                     return stateData.data_size;
+                }
+                else{
+                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
+                    write(fd,buf,frame_size);
+                    puts("llread: Sent RR\n"+ DATA_S_FLAG);
                 }
             }
             if(stateData.ctrl==CTRL_DISC) {
                 DISCreceived = 1;
-                printf("llread: Received DISC.\n");
-                break;
+                puts("llread: Received DISC.\n");
+                return -1;
             }
         }
     }
@@ -459,25 +447,25 @@ int llclose(int showStatistics){
             alarm(connection.timeout);
             alarmEnabled=1;
             if(alarmCount>0)
-                printf("Timed out.\n");
-            int size = buildFrame(buf,NULL,0,ADR_TX,CTRL_DISC,0);
-            printf("llclose: Sended DISC.\n");
+                puts("Timed out.\n");
+            int size = buildFrame(buf,ADR_TX,CTRL_DISC);
+            puts("llclose: Sent DISC.\n");
             write(fd,buf,size);
             while(alarmEnabled && !DISCreceived_tx){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
                 if(bytes_read<0)
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !DISCreceived_tx;++i){
-                    state_machine(buf[i],&stateData);
+                    state_handler(buf[i],&stateData);
                     if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                         DISCreceived_tx=1;
                 }
             }
         }
-        if(DISCreceived_tx) printf("llclose: Received DISC.\n");
-        int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_UA,0);//Build UA
+        if(DISCreceived_tx) puts("llclose: Received DISC.\n");
+        int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);//Build UA
         write(fd,buf,frame_size);
-        printf("llclose: Sended UA.\n");
+        puts("llclose: Sent UA.\n");
 
     } else { //Receiver
 
@@ -486,15 +474,15 @@ int llclose(int showStatistics){
             if(bytes_read<0)
                 return -1;
             for(unsigned int i=0;i<bytes_read && !DISCreceived;++i){
-                state_machine(buf[i],&stateData);
+                state_handler(buf[i],&stateData);
                 if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                     DISCreceived=1;
             }
         }
-        if(DISCreceived) printf("llclose: Received DISC .\n");
-        int frame_size=buildFrame(buf,0,0,ADR_TX,CTRL_DISC,0);//BUILD DISC
+        if(DISCreceived) puts("llclose: Received DISC .\n");
+        int frame_size=buildFrame(buf,ADR_TX,CTRL_DISC);//BUILD DISC
         write(fd,buf,frame_size); 
-        printf("llclose: Sent DISC.\n");
+        puts("llclose: Sent DISC.\n");
 
         int receivedUA=0;
         while(!receivedUA){
@@ -502,12 +490,12 @@ int llclose(int showStatistics){
             if(bytes_read<0)
                 return -1;
             for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
-                state_machine(buf[i],&stateData);
+                state_handler(buf[i],&stateData);
                 if(stateData.curr_state==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
                     receivedUA=1;
             }
         }
-        if(receivedUA) printf("llclose: Received UA .\n");
+        if(receivedUA) puts("llclose: Received UA .\n");
     }
 
     // Restore the old port settings
