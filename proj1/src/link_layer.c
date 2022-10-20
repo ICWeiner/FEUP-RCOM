@@ -94,124 +94,124 @@ int buildDataFrame(unsigned char* framebuf, const unsigned char* data,unsigned i
 
 void state_handler(unsigned char byte,State* stateData){
     switch (stateData -> currState){
-        case SMREJ:
-        case SMEND:
-            stateData -> currState=SMSTART;
-        case SMSTART:
+        case REJ_RCV:
+        case END_RCV:
+            stateData -> currState=START;
+        case START:
             if(byte == FLAG){
-                stateData ->currState = SMFLAG;
+                stateData ->currState = FLAG_RCV;
             }break;
-        case SMFLAG:
+        case FLAG_RCV:
             stateData->data_size = 0;
             if(byte == ADR_TX || byte == ADR_RX){
-                stateData->currState=SMADR;
+                stateData->currState=ADR_RCV;
                 stateData->adr=byte;
             }else if(byte == FLAG){
                 //do nothing, because we want to remain in the same state, should probably remove this condition...
             }else{
-                stateData=SMSTART;
+                stateData=START;
             }
             break;
-        case SMADR:
+        case ADR_RCV:
             if(byte == CTRL_UA     || byte == CTRL_SET
             || byte == CTRL_DISC   || byte == CTRL_REJ(0)
             || byte == CTRL_REJ(1) || byte == CTRL_DATA(0)
             || byte == CTRL_DATA(1)|| byte == CTRL_RR(0)
             || byte == CTRL_RR(1)){
-                stateData->currState =SMCTRL;
+                stateData->currState =CTRL_RCV;
                 stateData->ctrl = byte;
                 stateData->bcc = stateData->adr ^ stateData->ctrl;
             }
             else if (byte == FLAG){
-                stateData->currState=SMFLAG;
+                stateData->currState=FLAG_RCV;
             }else {
-                stateData->currState=SMSTART;
+                stateData->currState=START;
             }
             break;    
-        case SMCTRL:
+        case CTRL_RCV:
             if(byte == stateData->bcc){
-                stateData->currState=SMBCC1;
+                stateData->currState=BCC1_RCV;
             }
             else if (byte == FLAG){
-                stateData->currState=SMFLAG;
+                stateData->currState=FLAG_RCV;
             }else{
-                stateData->currState=SMSTART;
+                stateData->currState=START;
             }
             break;
-        case SMBCC1:
+        case BCC1_RCV:
             if(byte==FLAG){
                 if(stateData->ctrl==CTRL_DATA(0) || stateData->ctrl==CTRL_DATA(0) ){
-                    stateData->currState=SMFLAG;
+                    stateData->currState=FLAG_RCV;
                 }else{
-                    stateData->currState=SMEND;
+                    stateData->currState=END_RCV;
                 }
             }else if( stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(1)){
                 if(stateData->data != NULL){
                     stateData->data_size = 0;
                     if(byte == ESCAPE){
-                        stateData->currState = SMESC;
+                        stateData->currState = ESC_RCV;
                         stateData->bcc = 0;
                     }else{
                         stateData->data[stateData->data_size++] = byte;
                         stateData->bcc = byte;
-                        stateData->currState = SMDATA;
+                        stateData->currState = DATA_RCV;
                     }
                 }
             }else{
-                stateData->currState = SMSTART;
+                stateData->currState = START;
             }
             break;
-        case SMDATA:
+        case DATA_RCV:
             if(byte == ESCAPE){
-                stateData->currState = SMESC;
+                stateData->currState = ESC_RCV;
             }else if(byte == FLAG){
-                stateData->currState = SMREJ;
+                stateData->currState = REJ_RCV;
             }else if(byte == stateData->bcc){
-                stateData->currState = SMBCC2;
+                stateData->currState = BCC2_RCV;
             }else{
                 stateData->data[stateData->data_size++] = byte;
                 stateData->bcc^=byte;
             }
             break;
-        case SMESC:
+        case ESC_RCV:
             if(byte == FLAG){
-                stateData ->currState = SMREJ; 
+                stateData ->currState = REJ_RCV; 
             }else if(byte ==ESCAPE_FLAG){
-                if(stateData->bcc==FLAG){
-                    stateData->currState=SMBCC2;
+                if(stateData->bcc == FLAG){
+                    stateData->currState = BCC2_RCV;
                 }else{
-                    stateData->bcc^=FLAG;
-                    stateData->data[stateData->data_size++]=FLAG;
-                    stateData->currState=SMDATA;
+                    stateData->bcc ^= FLAG;
+                    stateData->data[stateData->data_size++] = FLAG;
+                    stateData->currState = DATA_RCV;
                 }
             }else if(byte == ESCAPE_ESCAPE){
                 if(stateData->bcc == ESCAPE){
-                    stateData->currState = SMBCC2;
+                    stateData->currState = BCC2_RCV;
                 }else{
                     stateData->bcc^=ESCAPE;
                     stateData->data[stateData->data_size++] = ESCAPE;
-                    stateData->currState = SMDATA;
+                    stateData->currState = DATA_RCV;
                 }
             }else{
-                stateData->currState=SMSTART;
+                stateData->currState=START;
             }
             break;
-        case SMBCC2:
+        case BCC2_RCV:
             if(byte == FLAG){
-                stateData->currState=SMEND;
+                stateData->currState=END_RCV;
             }else if( byte == 0){
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->bcc = 0;
             }else if(byte == ESCAPE){
                 stateData->data[stateData->data_size++]=stateData->bcc;    
                 stateData->bcc=0;
-                stateData->currState=SMESC;
+                stateData->currState=ESC_RCV;
             }
             else{
                 stateData->data[stateData->data_size++]=stateData->bcc;
                 stateData->data[stateData->data_size++]=byte;
                 stateData->bcc=byte;
-                stateData->currState=SMDATA;
+                stateData->currState=DATA_RCV;
             }
             break;
     }
@@ -265,7 +265,7 @@ int llopen(LinkLayer connectionParameters)
 
     if(connection.role == LlTx){ //set as transmitter
         int receivedUA=0;
-        stateData.currState=SMSTART;
+        stateData.currState=START;
         alarmCount=0;
         while(alarmCount<connection.nRetransmissions && !receivedUA){
             alarm(connection.timeout);
@@ -283,7 +283,7 @@ int llopen(LinkLayer connectionParameters)
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
+                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
                         receivedUA=1;
                 }
             }
@@ -294,7 +294,7 @@ int llopen(LinkLayer connectionParameters)
     else if (connection.role == LlRx){//set as receiver
         alarmCount=0;
         
-        stateData.currState=SMSTART;
+        stateData.currState=START;
         int receivedSET=0;
             while(!receivedSET){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
@@ -302,7 +302,7 @@ int llopen(LinkLayer connectionParameters)
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !receivedSET;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET)
+                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_SET)
                         receivedSET=1;
                 }
             }
@@ -360,7 +360,7 @@ int llwrite(const unsigned char *buf, int bufSize){
             return -1;
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){ 
             state_handler(buf[i],&stateData);
-            if(stateData.currState == SMEND){
+            if(stateData.currState == END_RCV){
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_RR(DATA_S_FLAG)){
                     receivedPacket = 1;
                     break;
@@ -388,21 +388,21 @@ int llread(unsigned char *packet){
         for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){
             state_handler(buf[i],&stateData);
             
-            if(stateData.currState >= SMBCC1 && stateData.data != NULL){//WIP
+            if(stateData.currState >= BCC1_RCV && stateData.data != NULL){//WIP
                 //printf("(state:%i,packet:%i,data_size:%i,last_data:%i)\n",state.state,packet[i], state.data_size,state.data[state.data_size-1]);
             }
 
-            if(stateData.currState == SMREJ && stateData.adr == ADR_TX){
+            if(stateData.currState == REJ_RCV && stateData.adr == ADR_TX){
                 int frame_size=buildFrame(buf,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)));
                 write(fd,buf,frame_size); //sends REJ reply.
                 puts("llread: Sent REJ.\n");
             }
-            if(stateData.currState == SMEND && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET){
+            if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET){
                 int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);
                 write(fd,buf,frame_size); //sends UA reply.
                 puts("llread: Sent UA.\n");
             }
-            if(stateData.currState == SMEND && stateData.adr == ADR_TX){//TODO:too much duplicate code?
+            if(stateData.currState == END_RCV && stateData.adr == ADR_TX){//TODO:too much duplicate code?
                 if(stateData.ctrl == CTRL_DATA(0)){
                     int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
@@ -458,7 +458,7 @@ int llclose(int showStatistics){
                     return -1;
                 for(unsigned int i=0;i<bytes_read && !DISCreceived_tx;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
+                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                         DISCreceived_tx=1;
                 }
             }
@@ -477,7 +477,7 @@ int llclose(int showStatistics){
                 return -1;
             for(unsigned int i=0;i<bytes_read && !DISCreceived;++i){
                 state_handler(buf[i],&stateData);
-                if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
+                if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
                     DISCreceived=1;
             }
         }
@@ -495,7 +495,7 @@ int llclose(int showStatistics){
                 return -1;
             for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
                 state_handler(buf[i],&stateData);
-                if(stateData.currState==SMEND && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
+                if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
                     receivedUA=1;
             }
         }

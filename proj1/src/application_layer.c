@@ -87,8 +87,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 			applicationbuffer[0] = CONTROL_DATA;
 			applicationbuffer[1] = i;
-			applicationbuffer[2] = file_bytes>>8;
-			applicationbuffer[3] = file_bytes%256;
+			applicationbuffer[2] = file_bytes >> 8;  //multiply  by 2 to the power of 8
+			applicationbuffer[3] = file_bytes % 256; //remainder of 2 to the power of 8
 
 			if(llwrite(applicationbuffer,file_bytes + 4) < 0){
 				puts("ERROR: failure on writing");
@@ -117,7 +117,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 		if(applicationbuffer[0] == CONTROL_START){
 			int offset = 1;
-			unsigned char FINISH_EARLY = FALSE, last_sequence_number=0;
+			unsigned char FINISH_EARLY = FALSE, last_sequence_number = 0;//TODO: Rework sequence number into only 0 and 1, request retransmission when number doesnt match
 
 			for(;offset<bytes_read;){
 				offset+=get_type_length_value(applicationbuffer+offset,&t,&l,&v);
@@ -175,7 +175,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 			if(FINISH_EARLY == FALSE){
                 int numbytes=llread(applicationbuffer);
-                if(numbytes<1){
+                if(numbytes < 1){
                     if(numbytes == -1){
 						puts("error on llread");
 					}else{

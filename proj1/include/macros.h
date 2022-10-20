@@ -1,5 +1,5 @@
 #ifndef MACROS_H
-#define MACROS_H
+#define MACROS_HMENDMEND
 
 #define FLAG (0x7e)
 #define ESCAPE (0x7d)
@@ -27,16 +27,16 @@
 
 typedef enum
 {
-     SMSTART,
-     SMFLAG,
-     SMADR,
-     SMCTRL,
-     SMBCC1,
-     SMDATA,
-     SMESC,
-     SMBCC2,
-     SMEND,
-     SMREJ
+     START,
+     FLAG_RCV,
+     ADR_RCV,
+     CTRL_RCV,
+     BCC1_RCV,
+     DATA_RCV,
+     ESC_RCV,
+     BCC2_RCV,
+     END_RCV,
+     REJ_RCV
 } state;
 
 #endif
