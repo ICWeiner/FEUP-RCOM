@@ -46,7 +46,7 @@ int stuffing(const unsigned char* message, int length, unsigned char* dest, unsi
     int destLenght = 0;
 
     for(int i = 0; i < length; i++){
-        if(bcc!=NULL){//if bcc isnt checked for null, funky things will happen
+        if(bcc != NULL){//if bcc isnt checked for null, funky things will happen
             *bcc ^= message[i];
         }
         
@@ -109,7 +109,7 @@ void state_handler(unsigned char byte,State* stateData){
             }else if(byte == FLAG){
                 //do nothing, because we want to remain in the same state, should probably remove this condition...
             }else{
-                stateData=START;
+                stateData = START;
             }
             break;
         case ADR_RCV:
@@ -118,32 +118,32 @@ void state_handler(unsigned char byte,State* stateData){
             || byte == CTRL_REJ(1) || byte == CTRL_DATA(0)
             || byte == CTRL_DATA(1)|| byte == CTRL_RR(0)
             || byte == CTRL_RR(1)){
-                stateData->currState =CTRL_RCV;
+                stateData->currState = CTRL_RCV;
                 stateData->ctrl = byte;
                 stateData->bcc = stateData->adr ^ stateData->ctrl;
             }
             else if (byte == FLAG){
-                stateData->currState=FLAG_RCV;
+                stateData->currState = FLAG_RCV;
             }else {
-                stateData->currState=START;
+                stateData->currState = START;
             }
             break;    
         case CTRL_RCV:
             if(byte == stateData->bcc){
-                stateData->currState=BCC1_RCV;
+                stateData->currState = BCC1_RCV;
             }
             else if (byte == FLAG){
-                stateData->currState=FLAG_RCV;
+                stateData->currState = FLAG_RCV;
             }else{
-                stateData->currState=START;
+                stateData->currState = START;
             }
             break;
         case BCC1_RCV:
             if(byte==FLAG){
-                if(stateData->ctrl==CTRL_DATA(0) || stateData->ctrl==CTRL_DATA(0) ){
-                    stateData->currState=FLAG_RCV;
+                if(stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(0) ){
+                    stateData->currState = FLAG_RCV;
                 }else{
-                    stateData->currState=END_RCV;
+                    stateData->currState = END_RCV;
                 }
             }else if( stateData->ctrl == CTRL_DATA(0) || stateData->ctrl == CTRL_DATA(1)){
                 if(stateData->data != NULL){
@@ -170,7 +170,7 @@ void state_handler(unsigned char byte,State* stateData){
                 stateData->currState = BCC2_RCV;
             }else{
                 stateData->data[stateData->data_size++] = byte;
-                stateData->bcc^=byte;
+                stateData->bcc ^= byte;
             }
             break;
         case ESC_RCV:
@@ -188,30 +188,30 @@ void state_handler(unsigned char byte,State* stateData){
                 if(stateData->bcc == ESCAPE){
                     stateData->currState = BCC2_RCV;
                 }else{
-                    stateData->bcc^=ESCAPE;
+                    stateData->bcc ^= ESCAPE;
                     stateData->data[stateData->data_size++] = ESCAPE;
                     stateData->currState = DATA_RCV;
                 }
             }else{
-                stateData->currState=START;
+                stateData->currState = START;
             }
             break;
         case BCC2_RCV:
             if(byte == FLAG){
-                stateData->currState=END_RCV;
+                stateData->currState = END_RCV;
             }else if( byte == 0){
-                stateData->data[stateData->data_size++]=stateData->bcc;
+                stateData->data[stateData->data_size++] = stateData->bcc;
                 stateData->bcc = 0;
             }else if(byte == ESCAPE){
-                stateData->data[stateData->data_size++]=stateData->bcc;    
-                stateData->bcc=0;
-                stateData->currState=ESC_RCV;
+                stateData->data[stateData->data_size++] = stateData->bcc;    
+                stateData->bcc = 0;
+                stateData->currState = ESC_RCV;
             }
             else{
-                stateData->data[stateData->data_size++]=stateData->bcc;
-                stateData->data[stateData->data_size++]=byte;
-                stateData->bcc=byte;
-                stateData->currState=DATA_RCV;
+                stateData->data[stateData->data_size++] = stateData->bcc;
+                stateData->data[stateData->data_size++] = byte;
+                stateData->bcc = byte;
+                stateData->currState = DATA_RCV;
             }
             break;
     }
@@ -264,10 +264,10 @@ int llopen(LinkLayer connectionParameters)
     }
 
     if(connection.role == LlTx){ //set as transmitter
-        int receivedUA=0;
+        int receivedUA = 0;
         stateData.currState=START;
-        alarmCount=0;
-        while(alarmCount<connection.nRetransmissions && !receivedUA){
+        alarmCount = 0;
+        while(alarmCount<connection.nRetransmissions && receivedUA == FALSE){
             alarm(connection.timeout);
             alarmEnabled = TRUE;
             if(alarmCount > 0){
@@ -277,11 +277,11 @@ int llopen(LinkLayer connectionParameters)
             puts("llopen: Sent SET.\n");
             write(fd,buf,size);
             puts("HELLO" + size);
-            while(alarmEnabled && !receivedUA){
+            while(alarmEnabled == TRUE && receivedUA == FALSE){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
                 if(bytes_read < 0)
                     return -1;
-                for(unsigned int i = 0;i < bytes_read && !receivedUA; ++i){
+                for(unsigned int i = 0;i < bytes_read && receivedUA == FALSE; ++i){
                     state_handler(buf[i], &stateData);
                     if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_UA)
                         receivedUA=1;
@@ -302,7 +302,7 @@ int llopen(LinkLayer connectionParameters)
                 int bytes_read = read(fd, buf, PACKET_SIZE_LIMIT);
                 if(bytes_read < 0)
                     return -1;
-                for(unsigned int i = 0;i < bytes_read && !receivedSET; ++i){
+                for(unsigned int i = 0;i < bytes_read && receivedSET == FALSE; ++i){
                     state_handler(buf[i], &stateData);
                     if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET)
                         receivedSET = TRUE;
@@ -331,7 +331,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         if(ret == -1){
             return -1;
         }
-        sent+=ret;
+        sent += ret;
     }
 
     int receivedPacket = FALSE, resend = FALSE, retransmissions = 0;
@@ -346,23 +346,25 @@ int llwrite(const unsigned char *buf, int bufSize){
             alarm(connection.timeout);
         }
         if(resend == TRUE){
-            if(retransmissions==connection.nRetransmissions){
+            if(retransmissions == connection.nRetransmissions){
                 puts("Exceeded retransmission limit.\n");
                 return -1;
             }
-            for(unsigned int sent=0;sent<frame_size;){
+            for(unsigned int sent = 0;sent < frame_size;){
                 int ret=write(fd,bigBuf+sent,frame_size-sent);
-                if(ret==-1)
+                if(ret == -1){
                     return -1;
-                sent+=ret;
+                }   
+                sent += ret;
             }
             resend = FALSE;
             retransmissions++;
         }
         int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
-        if(bytes_read < 0)
+        if(bytes_read < 0){
             return -1;
-        for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){ 
+        }  
+        for(unsigned int i = 0;i < bytes_read && receivedPacket == FALSE; ++i){ 
             state_handler(buf[i],&stateData);
             if(stateData.currState == END_RCV){
                 if(stateData.adr == ADR_TX && stateData.ctrl == CTRL_RR(DATA_S_FLAG)){
@@ -383,13 +385,13 @@ int llwrite(const unsigned char *buf, int bufSize){
 // LLREAD
 ////////////////////////////////////////////////
 int llread(unsigned char *packet){
-     int receivedPacket=0;
-    stateData.data=packet; //State machine writes to packet buffer directly.
-    while(!receivedPacket){
+     int receivedPacket = 0;
+    stateData.data = packet; //State machine writes to packet buffer directly.
+    while(receivedPacket == FALSE){
         int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
         if(bytes_read<0)
             return -1;
-        for(unsigned int i=0;i<bytes_read && !receivedPacket;++i){
+        for(unsigned int i = 0;i < bytes_read && receivedPacket == FALSE; ++i){
             state_handler(buf[i],&stateData);
             
             if(stateData.currState >= BCC1_RCV && stateData.data != NULL){//WIP
@@ -397,30 +399,30 @@ int llread(unsigned char *packet){
             }
 
             if(stateData.currState == REJ_RCV && stateData.adr == ADR_TX){
-                int frame_size=buildFrame(buf,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)));
+                int frame_size = buildFrame(buf,ADR_TX,(stateData.ctrl==CTRL_DATA(0)?CTRL_REJ(0):CTRL_REJ(1)));
                 write(fd,buf,frame_size); //sends REJ reply.
                 puts("llread: Sent REJ.\n");
             }
             if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_SET){
-                int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);
+                int frame_size = buildFrame(buf,ADR_TX,CTRL_UA);
                 write(fd,buf,frame_size); //sends UA reply.
                 puts("llread: Sent UA.\n");
             }
             if(stateData.currState == END_RCV && stateData.adr == ADR_TX){//TODO:too much duplicate code?
                 if(stateData.ctrl == CTRL_DATA(0)){
-                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
+                    int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
                     puts("llread: Sent RR.\n" + DATA_S_FLAG);
                     return stateData.data_size;
                 }
                 else if(stateData.ctrl == CTRL_DATA(1)){
-                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(1));
+                    int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(1));
                     write(fd,buf,frame_size);
                     puts("llread: Sent RR.\n" + DATA_S_FLAG);
                     return stateData.data_size;
                 }
                 else{
-                    int frame_size=buildFrame(buf,ADR_TX,CTRL_RR(0));
+                    int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
                     puts("llread: Sent RR\n"+ DATA_S_FLAG);
                 }
@@ -441,69 +443,71 @@ int llread(unsigned char *packet){
 int llclose(int showStatistics){
     //trasmistor - sends DISC, receives UA
     //receiver - receives DISC in llread, sends UA
-    signal(SIGALRM,alarm_handler);
+    signal(SIGALRM, alarm_handler);
     alarmCount=0;
 
-    if(connection.role==LlTx) { //Transmitter case
+    if(connection.role == LlTx) { //Transmitter case
 
-        int DISCreceived_tx=0;
+        int DISCreceived_tx = 0;
         
-        while(alarmCount<connection.nRetransmissions && !DISCreceived_tx){
+        while(alarmCount<connection.nRetransmissions && DISCreceived_tx == FALSE){
             alarm(connection.timeout);
             alarmEnabled = TRUE;
-            if(alarmCount > 0)
+            if(alarmCount > 0){
                 puts("Timed out.\n");
+            }
             int size = buildFrame(buf,ADR_TX,CTRL_DISC);
             puts("llclose: Sent DISC.\n");
             write(fd,buf,size);
-            while(alarmEnabled && !DISCreceived_tx){
+            while(alarmEnabled == TRUE && DISCreceived_tx == FALSE){
                 int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
                 if(bytes_read<0)
                     return -1;
-                for(unsigned int i=0;i<bytes_read && !DISCreceived_tx;++i){
+                for(unsigned int i = 0;i < bytes_read && DISCreceived_tx == FALSE;++i){
                     state_handler(buf[i],&stateData);
-                    if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
+                    if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_DISC)
                         DISCreceived_tx=1;
                 }
             }
         }
-        if(DISCreceived_tx) puts("llclose: Received DISC.\n");
-        int frame_size=buildFrame(buf,ADR_TX,CTRL_UA);//Build UA
+        if(DISCreceived_tx == TRUE){
+            puts("llclose: Received DISC.\n");
+        } 
+        int frame_size = buildFrame(buf,ADR_TX,CTRL_UA);//Build UA
         write(fd,buf,frame_size);
         puts("llclose: Sent UA.\n");
         sleep(1);
 
     } else { //Receiver
-
-        while(!DISCreceived){
+        while(DISCreceived == FALSE){
             int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
             if(bytes_read < 0)
                 return -1;
-            for(unsigned int i=0;i<bytes_read && !DISCreceived;++i){
-                state_handler(buf[i],&stateData);
-                if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_DISC)
-                    DISCreceived=1;
+            for(unsigned int i = 0;i < bytes_read && DISCreceived == FALSE;++i){
+                state_handler(buf[i], &stateData);
+                if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_DISC)
+                    DISCreceived = TRUE;
             }
         }
-        if(DISCreceived){
+        if( DISCreceived == TRUE){
             puts("llclose: Received DISC .\n");
         } 
-        int frame_size=buildFrame(buf,ADR_TX,CTRL_DISC);//BUILD DISC
+        int frame_size = buildFrame(buf,ADR_TX,CTRL_DISC);//BUILD DISC
         write(fd,buf,frame_size); 
         puts("llclose: Sent DISC.\n");
 
         int receivedUA = FALSE;
-        while(!receivedUA){
+        while( receivedUA == FALSE){
             int bytes_read = read(fd,buf,PACKET_SIZE_LIMIT);
             if(bytes_read<0)
                 return -1;
-            for(unsigned int i=0;i<bytes_read && !receivedUA;++i){
+            for(unsigned int i = 0;i < bytes_read && receivedUA == FALSE; ++i){
                 state_handler(buf[i],&stateData);
-                if(stateData.currState==END_RCV && stateData.adr==ADR_TX && stateData.ctrl == CTRL_UA)
-                    receivedUA=1;
+                if(stateData.currState == END_RCV && stateData.adr == ADR_TX && stateData.ctrl == CTRL_UA)
+                    receivedUA = TRUE;
             }
         }
-        if(receivedUA){
+        if(receivedUA == TRUE){
             puts("llclose: Received UA .\n");
         } 
     }
