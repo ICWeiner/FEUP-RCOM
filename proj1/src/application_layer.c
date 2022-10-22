@@ -57,13 +57,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 		}else{
 			puts("File opened sucessfuly");
 		}
-
+  		// (pointer to file, number of bytes to offset from, where offset is added)
 		fseek(file,0L,SEEK_END);
 		long int fileSize = ftell(file);//find end of file
 
 		fseek(file,0,SEEK_SET);//return to begining of file
 
-		//TODO write file size?
+		//campo controlo, T1, L1 
 
 		applicationbuffer[0] = CONTROL_START;
 		applicationbuffer[1] = TYPE_FILESIZE;
@@ -75,8 +75,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 		unsigned char FAIL_FLAG = 0;
 		unsigned long bytesTransmitted = 0;
 
+ 		// enquanto houver bytes para ler
 		for(unsigned char i = 0; bytesTransmitted < fileSize;++i){
 			int bytequant = fileSize - bytesTransmitted < (MAX_PAYLOAD_SIZE)? fileSize - bytesTransmitted : (MAX_PAYLOAD_SIZE);
+			 // applicationbuff +4 = This is the pointer to a block of memory with a minimum size of size*nmemb bytes.
+            // 1 = This is the size in bytes of each element to be read.
+            // bytequant = This is the number of elements, each one with a size of size bytes
+            // file = This is the pointer to a FILE object that specifies an input stream.
 			unsigned long file_bytes = fread(applicationbuffer + 4, 1, bytequant, file);
 
 			if(file_bytes != bytequant){
@@ -119,23 +124,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 			int offset = 1;
 			unsigned char FINISH_EARLY = FALSE, last_sequence_number = 0;//TODO: Rework sequence number into only 0 and 1, request retransmission when number doesnt match
 
-			for(;offset<bytes_read;){
+			while(offset<bytes_read){
 				offset+=get_type_length_value(applicationbuffer+offset,&t,&l,&v);
 				if(t==TYPE_FILESIZE){
 					fileSize = *((unsigned long*)v);
-					//TODO: WRITE FILESIZE
+					printf("Filesize:%li",filesize);
 					}
 			}
 
 			FILE* file = fopen(filename, "w");
-			if(!file) {
+			if(file == FALSE) {
 				puts("ERROR: Couldn't open file to write");
 				return;
 			} else {
 				puts("Successfully opened file to write");
 			}
 
-            for(;fileSizeReceived < fileSize;){
+            while(fileSizeReceived < fileSize){
                 int numbytes = llread(applicationbuffer);
                 if(numbytes < 1){
                     if(numbytes == -1)
