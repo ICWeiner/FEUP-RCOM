@@ -28,9 +28,9 @@
 typedef enum
 {
      START,
-     FLAG_RCV,
-     ADR_RCV,
-     CTRL_RCV,
+     FLAG_RCV,   /** Flag Received, waiting address */
+     ADR_RCV,    /** Address Received, waiting control octet */
+     CTRL_RCV,   /** Supervision Message type - Control octet received, waiting BCC */
      BCC1_RCV,
      DATA_RCV,
      ESC_RCV,
