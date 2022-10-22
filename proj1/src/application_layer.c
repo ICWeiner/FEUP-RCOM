@@ -149,12 +149,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                         puts("Received a packet that is too small");
 						puts(numbytes + " bytes)");
                 }
-                if(applicationbuffer[0] == CONTROL_END){
+                if(applicationbuffer[0] == CONTROL_END){ // chegou ao control end antes do esperado
                     puts("Disconnected before EOF");
                     FINISH_EARLY = TRUE;
                     break;
                 }
-                if(applicationbuffer[0] == CONTROL_DATA){
+                if(applicationbuffer[0] == CONTROL_DATA){ // inicio de um pacote de dados bate certo 
                     if(numbytes < 5)
                         puts("Received a packet that is too small to be correct");
 						puts(numbytes + " bytes)");
