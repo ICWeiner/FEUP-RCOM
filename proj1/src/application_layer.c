@@ -131,9 +131,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 					printf("Filesize:%li\n",fileSize);
 					}
 			}
+			
 
 			FILE* file = fopen(filename, "w");
 			if(file == FALSE) {
+				
 				puts("ERROR: Couldn't open file to write");
 				return;
 			} else {
@@ -146,6 +148,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     if(numbytes == -1)
                         puts("error on llread");
                     else
+					
                         puts("Received a packet that is too small");
 						puts(numbytes + " bytes)");
                 }
@@ -156,8 +159,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 if(applicationbuffer[0] == CONTROL_DATA){ // inicio de um pacote de dados bate certo 
                     if(numbytes < 5)
-                        puts("Received a packet that is too small to be correct");
-						puts(numbytes + " bytes)");
+						puts("Received a packet that is too small to be correct with numbytes: " + numbytes);
                     if(applicationbuffer[1] != last_sequence_number){
 						puts("Received packet on the wrong sequence actual number: ");
 						puts(applicationbuffer[1] + "  expected number" + last_sequence_number - 1);
@@ -172,6 +174,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 						fwrite(applicationbuffer + 4, 1, size, file);
 						fileSizeReceived += size;
 						last_sequence_number++;
+					
 						printf("Received packet with number: %d\n", applicationbuffer[1]);
                     }
                 }
