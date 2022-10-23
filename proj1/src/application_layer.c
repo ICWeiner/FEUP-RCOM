@@ -100,7 +100,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 				FAIL_FLAG = TRUE;
 				break;
 			}else{
-				puts("Sent packet with this many bytes:");
+				printf("Sent packet with this many bytes: %d\n", bytequant);
 				//puts(bytequant); fix tis
 			}
 			bytesTransmitted += bytequant; 
@@ -128,7 +128,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 				offset+=get_type_length_value(applicationbuffer+offset,&t,&l,&v);
 				if(t==TYPE_FILESIZE){
 					fileSize = *((unsigned long*)v);
-					printf("Filesize:%li",filesize);
+					printf("Filesize: %li\n",fileSize);
 					}
 			}
 
@@ -172,7 +172,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 						fwrite(applicationbuffer + 4, 1, size, file);
 						fileSizeReceived += size;
 						last_sequence_number++;
-						puts("received packet with number:" );
+						printf("Received packet with number: %d\n", applicationbuffer[1]);
                     }
                 }
             }

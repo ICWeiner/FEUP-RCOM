@@ -412,19 +412,19 @@ int llread(unsigned char *packet){
                 if(stateData.ctrl == CTRL_DATA(0)){
                     int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
-                    puts("llread: Sent RR.\n" + DATA_S_FLAG);
+                    puts("llread: Sent RR.\n" +  DATA_S_FLAG);
                     return stateData.data_size;
                 }
                 else if(stateData.ctrl == CTRL_DATA(1)){
                     int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(1));
                     write(fd,buf,frame_size);
-                    puts("llread: Sent RR.\n" + DATA_S_FLAG);
+                    puts("llread: Sent RR.\n" +  DATA_S_FLAG);
                     return stateData.data_size;
                 }
                 else{
                     int frame_size = buildFrame(buf,ADR_TX,CTRL_RR(0));
                     write(fd,buf,frame_size);
-                    puts("llread: Sent RR\n"+ DATA_S_FLAG);
+                    puts("llread: Sent RR\n" + DATA_S_FLAG);
                 }
             }
             if(stateData.ctrl == CTRL_DISC) {
