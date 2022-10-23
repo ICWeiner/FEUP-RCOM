@@ -128,7 +128,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 				offset+=get_type_length_value(applicationbuffer+offset,&t,&l,&v);
 				if(t==TYPE_FILESIZE){
 					fileSize = *((unsigned long*)v);
-					printf("Filesize:%li",filesize);
+					printf("Filesize:%li",fileSize);
 					}
 			}
 
