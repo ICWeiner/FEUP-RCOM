@@ -86,6 +86,11 @@ int main(int argc, char **argv) {
     buf[bytes_read]='\0';
     printf("%s\n",buf); // 220
 
+    if(strncmp(buf,"220",3) != 0) {
+        perror("220\n");
+        exit(-1);
+    }
+
     sprintf(buf2,"user %s\r\n",user); // user = anonymous 
     bytes = write(sockfd, buf2, strlen(buf2)); // sockfd = 3 
     if (bytes > 0)
@@ -97,6 +102,11 @@ int main(int argc, char **argv) {
     bytes_read=read(sockfd,buf,512);
     buf[bytes_read]='\0';
     printf("%s\n",buf); // 331
+    if(strncmp(buf,"331 Please specify the password.",32) != 0) {
+        perror("331 Please specify the password.\n");
+        exit(-1);
+    }
+    
     sprintf(buf2,"pass %s\r\n",password); // password = password
     write(sockfd,buf2,strlen(buf2)); // buf2 = pass password
     //printf("sockfd value: %d\nbuf2 value: %s", sockfd, buf2);
@@ -104,11 +114,21 @@ int main(int argc, char **argv) {
     buf[bytes_read]='\0';
     printf("%s",buf); // 230
 
+    if(strncmp(buf,"230",3) != 0) {
+        perror("230\n");
+        exit(-1);
+    }
+
     sprintf(buf2,"pasv\r\n");
     write(sockfd,buf2,strlen(buf2)); // sockfd = 3, buf2 = pasv
     bytes_read=read(sockfd,buf,512);
     buf[bytes_read]='\0';
     printf("%s",buf); // 227 
+
+    if(strncmp(buf,"227",3) != 0) {
+        perror("227\n");
+        exit(-1);
+    }
     
     int h1=0,h2=0,h3=0,h4=0,p1=0,p2=0,pasvport;
     sscanf(buf,"227 Entering Passive Mode (%i,%i,%i,%i,%i,%i).",&h1,&h2,&h3,&h4,&p1,&p2);
@@ -145,6 +165,11 @@ int main(int argc, char **argv) {
     }
     bytes_read=read(sockfd,buf,512);
     buf[bytes_read]='\0'; // 150 
+    
+     if(strncmp(buf,"150",3) != 0) {
+        perror("150\n");
+        exit(-1);
+    }
 
     char* filename = strrchr(urlPath, '/');
 
@@ -163,8 +188,18 @@ int main(int argc, char **argv) {
         //printf("%s",buf);
     }
 
+     if(strncmp(buf,"226",3) != 0) {
+        perror("226\n");
+        exit(-1);
+    }
+
     fclose(fd); //close received file
     printf("File Received!\n");
+
+    if(strncmp(buf,"221",3) != 0) {
+        perror("221\n");
+        exit(-1);
+    }
 
     if (close(sockfd)<0) {
         perror("close()");
