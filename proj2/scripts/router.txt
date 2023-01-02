@@ -1,0 +1,12 @@
+ether1 -> lab network (PY.1)
+ether2 -> port 5
+
+/system reset-configuration
+
+/ip address add address=172.16.1.59/24 interface=ether1
+/ip address add address=172.16.51.254/24 interface=ether2
+/ip address print
+
+/ip route add dst-address=172.16.50.0/24 gateway=172.16.51.253
+/ip route add address=0.0.0.0/0 gateway=172.16.2.254
+/ip route print

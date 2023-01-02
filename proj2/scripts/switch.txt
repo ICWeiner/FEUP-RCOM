@@ -1,0 +1,19 @@
+tuxY3E0 -> porta 1 da switch
+tuxY2E0 -> porta 2 da switch
+tuxY4E0 -> porta 3 da switch
+tuxY4E1 -> porta 4 da switch
+tuxY4S0 -> T3
+T4 -> console da switch
+
+
+/system reset-configuration
+/interface bridge add name="bridge0"
+/interface bridge add name="bridge1"
+
+/interface bridge port remove [find interface=ether1]
+/interface bridge port remove [find interface=ether2]
+/interface bridge port remove [find interface=ether3]
+	
+/interface bridge port add bridge=bridge0 interface=ether1
+/interface bridge port add bridge=bridge1 interface=ether2
+/interface bridge port add bridge=bridge0 interface=ether3
